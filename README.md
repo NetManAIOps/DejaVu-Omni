@@ -1,18 +1,20 @@
-# DejaVu
+# DejaVu-Omni
 ## Table of Contents
 =================
 
-  * [Code](#code)
-    * [Install Requirements](#install-requirements)
-    * [Usage](#usage)
-    * [Example](#example)
-  * [Datasets](#datasets)
-  * [Deployment and Failure Injection Scripts of Train-Ticket](#deployment-and-failure-injection-scripts-of-train-ticket)
-  * [Citation](#citation)
-  * [Supplementary details](#supplementary-details)
+- [DejaVu-Omni](#dejavu-omni)
+  - [Table of Contents](#table-of-contents)
+  - [Code](#code)
+    - [Install](#install)
+    - [Usage](#usage)
+    - [Example](#example)
+  - [Datasets](#datasets)
+  - [Deployment and Failure Injection Scripts of Train-Ticket](#deployment-and-failure-injection-scripts-of-train-ticket)
+  - [Citation](#citation)
+  - [Supplementary details](#supplementary-details)
+    - [Local interpretation](#local-interpretation)
+    - [Global interpretation](#global-interpretation)
   
-## Paper
-A preprint version: https://arxiv.org/abs/2207.09021
 ## Code
 ### Install
 1. All the software requirements are already pre-installed in the Docker image below. The requirements are also listed in `requirements.txt` and `requirements-dev.txt`. Note that `DGL 0.8` is not released yet when I did this work, so I installed `DGL 0.8` manually from the source code. PyTorch version should be equal to or greater than 1.11.0.
