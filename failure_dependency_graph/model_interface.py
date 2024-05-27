@@ -36,6 +36,7 @@ class FDGModelInterface(pl.LightningModule, Generic[CONFIG_T, DATASET_T]):
             return_real_path=True,
             use_anomaly_direction_constraint=config.use_anomaly_direction_constraint,
             loaded_FDG=loaded_FDG,
+            flush_dataset_cache=config.flush_dataset_cache
         )
         dataset_cache_dir = config.cache_dir / ".".join(
             [
@@ -47,13 +48,42 @@ class FDGModelInterface(pl.LightningModule, Generic[CONFIG_T, DATASET_T]):
         logger.info(f"dataset_cache_dir={dataset_cache_dir}")
         self._cache = Cache(str(dataset_cache_dir), size_limit=int(1e10))
 
-        self._train_fault_ids, self._validation_fault_ids, self._test_fault_ids = split_failures_by_type(
-            self._fdg.failures_df, split=self._config.dataset_split_ratio,
-            train_set_sampling_ratio=self._config.train_set_sampling,
-            balance_train_set=self._config.balance_train_set,
-            fdg=self.fdg,
-        )
-
+        if self._config.dataset_split_method == 'type':
+            self._train_fault_ids, self._validation_fault_ids, self._test_fault_ids = split_failures_by_type(
+                self._fdg.failures_df, split=self._config.dataset_split_ratio,
+                train_set_sampling_ratio=self._config.train_set_sampling,
+                balance_train_set=self._config.balance_train_set,
+                fdg=self.fdg,
+            )
+            self._non_recurring_list, self._non_recurring_list_test = [], []
+            self._drift_list = []
+        elif self._config.dataset_split_method == 'recur':
+            self._train_fault_ids, self._validation_fault_ids, self._test_fault_ids, self._non_recurring_list, non_recurring_fault_set, self._non_recurring_list_test, non_recurring_fault_set_test = split_failures_by_recur(
+                self._fdg.failures_df, split=self._config.dataset_split_ratio,
+                train_set_sampling_ratio=self._config.train_set_sampling,
+                balance_train_set=self._config.balance_train_set,
+                fdg=self.fdg,
+                non_recur_index_train=self._config.non_recur_index_train,
+                non_recur_index_test=self._config.non_recur_index_test
+            )
+            self._fdg, _ = FDG.load(
+                dir_path=config.data_dir,
+                graph_path=config.graph_config_path, metrics_path=config.metrics_path, faults_path=config.faults_path,
+                return_real_path=True,
+                use_anomaly_direction_constraint=config.use_anomaly_direction_constraint,
+                loaded_FDG=None,
+                flush_dataset_cache=config.flush_dataset_cache,
+                non_recurring_fault_set=non_recurring_fault_set | non_recurring_fault_set_test
+            )
+            self._drift_list = []
+        elif self._config.dataset_split_method == 'drift':
+            self._train_fault_ids, self._validation_fault_ids, self._test_fault_ids, self._drift_list = split_failures_by_drift(
+                self._fdg.failures_df, split=self._config.dataset_split_ratio,
+                train_set_sampling_ratio=self._config.train_set_sampling,
+                balance_train_set=self._config.balance_train_set,
+                fdg=self.fdg, drift_time=self._config.drift_time,
+            )
+            self._non_recurring_list, self._non_recurring_list_test = [], []
         self._train_dataset, self._validation_dataset, self._test_dataset = None, None, None  # set by self.setup()
 
     @property
@@ -91,6 +121,18 @@ class FDGModelInterface(pl.LightningModule, Generic[CONFIG_T, DATASET_T]):
     @property
     def test_failure_ids(self) -> List[int]:
         return self._test_fault_ids
+    
+    @property
+    def non_recurring_list(self) -> List[int]:
+        return self._non_recurring_list
+
+    @property
+    def non_recurring_list_test(self) -> List[int]:
+        return self._non_recurring_list_test
+
+    @property
+    def drift_list(self) -> List[int]:
+        return self._drift_list
 
     @cached_property
     def metric_preprocessor(self) -> MetricPreprocessor:
@@ -100,7 +142,7 @@ class FDGModelInterface(pl.LightningModule, Generic[CONFIG_T, DATASET_T]):
     def get_metric_preprocessor(fdg: FDG, cache: Cache, config: FDGBaseConfig) -> MetricPreprocessor:
         fe_cache_key = f"MetricPreprocessor"
         if fe_cache_key not in cache or config.flush_dataset_cache:
-            cache.set(fe_cache_key, MetricPreprocessor(fdg=fdg, granularity=60))
+            cache.set(fe_cache_key, MetricPreprocessor(fdg=fdg, granularity=60, clip_value=config.input_clip_val))
         else:
             logger.warning("Use cached metric preprocessor")
         mp = cache.get(fe_cache_key)
@@ -197,6 +239,7 @@ def split_failures_by_type(
     rng = np.random.default_rng(233)  # the random seed should be fixed
     fault_type_2_id_list = defaultdict(list)
     id_2_root_cause_node = {}
+    print(fdg._node_to_class)
     for idx, (_, fault) in enumerate(fault_df.iterrows()):
         # kpis = fault['kpi'] if not pd.isnull(fault['kpi']) else ""
         # 考虑根因KPI来对故障分类的话，有很多类别的故障数量太少（只有一两个）
@@ -204,6 +247,9 @@ def split_failures_by_type(
             fault_type = tuple(fdg.instance_to_class(_) for _ in fault['root_cause_node'].split(";"))
         else:
             fault_type = tuple(fault['node_type'].split(";"))
+        fault_type = list(fault_type)
+        fault_type.sort()
+        fault_type = tuple(fault_type)
         fault_type_2_id_list[fault_type].append(idx)
         id_2_root_cause_node[idx] = set(fault['root_cause_node'].split(";"))
     logger.info(
@@ -269,3 +315,239 @@ def split_failures_by_type(
         f"{len(test_list)=} "
     )
     return train_list, validation_list, test_list
+
+
+def split_failures_by_recur(
+        fault_df: pd.DataFrame, *, fdg: FDG = None, split: Tuple[float, float, float] = (0.3, 0.2, 0.5),
+        train_set_sampling_ratio: float = 1.0, balance_train_set: bool = False, non_recur_index_train: int = -1, non_recur_index_test: int = -1
+):
+    rng = np.random.default_rng(233)  # the random seed should be fixed
+    fault_type_2_id_list = defaultdict(list)
+    id_2_root_cause_node = {}
+    for idx, (_, fault) in enumerate(fault_df.iterrows()):
+        # kpis = fault['kpi'] if not pd.isnull(fault['kpi']) else ""
+        # 考虑根因KPI来对故障分类的话，有很多类别的故障数量太少（只有一两个）
+        if fdg is not None:
+            fault_type = tuple(fdg.instance_to_class(_) for _ in fault['root_cause_node'].split(";"))
+        else:
+            fault_type = tuple(fault['node_type'].split(";"))
+        fault_type = list(fault_type)
+        fault_type.sort()
+        fault_type = tuple(fault_type)
+        fault_type_2_id_list[fault_type].append(idx)
+        id_2_root_cause_node[idx] = set(fault['root_cause_node'].split(";"))
+    logger.info(
+        f"fault ids with multiple root causes: "
+        f"{[(k, len(v)) for k, v in id_2_root_cause_node.items() if len(v) > 1]}"
+    )
+    train_ids_list: List[List[int]] = []
+    validation_list: List[int] = []
+    test_list: List[int] = []
+    num_fault_type = len(fault_type_2_id_list)
+    non_recurring_list: List[int] = []
+    non_recurring_list_test: List[int] = []
+    non_recurring_fault_set: set = set()
+    non_recurring_fault_sets = []
+    for non_recurring_fault in list(fault_type_2_id_list.keys()):
+        s = set(non_recurring_fault)
+        if len(s)==1 and s not in non_recurring_fault_sets:
+            non_recurring_fault_sets.append(s)
+    if non_recur_index_train == -1:       # random select one as non-recurring failure
+        non_recur_index_train = rng.integers(num_fault_type, size=1)[0]
+        non_recurring_fault_set = set(list(fault_type_2_id_list.keys())[non_recur_index_train])
+    else:
+        non_recurring_fault_set = non_recurring_fault_sets[non_recur_index_train]
+    if non_recur_index_test == -1:       # random select one as non-recurring failure to test
+        non_recur_index_test = rng.integers(num_fault_type, size=1)[0]
+        while non_recur_index_test == non_recur_index_train:
+            non_recur_index_test = rng.integers(num_fault_type, size=1)[0]
+        non_recurring_fault_set_test = set(list(fault_type_2_id_list.keys())[non_recur_index_test])
+    else:
+        non_recurring_fault_set_test = non_recurring_fault_sets[non_recur_index_test]
+    for fault_type, ids in fault_type_2_id_list.items():
+        if non_recurring_fault_set <= set(fault_type):
+            _train_split = 0
+            _valid_split = 0
+            non_recurring_list.extend(ids)
+        elif non_recurring_fault_set_test <= set(fault_type):
+            _train_split = 0
+            _valid_split = 0
+            non_recurring_list_test.extend(ids)
+        else:
+            _train_split = max(int(len(ids) * split[0]), 1)
+            _valid_split = max(int(len(ids) * (split[0] + split[1])), 1)
+        rng.shuffle(ids)
+
+        train_ids = ids[0:_train_split]
+        train_ids_list.append(train_ids)
+
+        validation_ids = ids[_train_split:_valid_split]
+        validation_list.extend(validation_ids)
+
+        test_ids = ids[_valid_split:]
+        test_list.extend(test_ids)
+
+        del _train_split, _valid_split
+
+        train_rc_nodes = reduce(lambda a, b: a | b, [id_2_root_cause_node[_] for _ in train_ids], set())
+        test_rc_nodes = list(id_2_root_cause_node[_] for _ in test_ids)
+        logger.info(
+            f"{fault_type=!s:30} \n"
+            f"train_length={len(train_ids):<5.0f} {train_ids=} \n"
+            f"validation_length={len(validation_ids):<5.0f} {validation_ids=} \n"
+            f"test_length={len(test_ids):<5.0f} {test_ids=} \n"
+            f"({len(list(filter(lambda _: _ <= train_rc_nodes, test_rc_nodes))):<3.0f} recurring faults)")
+        del train_ids, validation_ids, test_ids
+
+    if balance_train_set:
+        balanced_train_ids_list = []
+        max_length = max([len(_) for _ in train_ids_list])
+        for train_ids in train_ids_list:
+            oversampling_ratio = max_length // len(train_ids)
+            logger.info(f"repeat {train_ids} for {oversampling_ratio} times")
+            balanced_train_ids_list.append(train_ids * oversampling_ratio)
+        train_ids_list = balanced_train_ids_list
+        del oversampling_ratio, max_length, train_ids, balanced_train_ids_list
+
+    train_list = sum(train_ids_list, [])
+    del train_ids_list
+
+    sampled_train_list = []
+    for i in train_list:
+        if rng.random() <= train_set_sampling_ratio:
+            sampled_train_list.append(i)
+    # 除非train_set_sampling_ratio写成0，否则至少放一个训练数据
+    if len(sampled_train_list) == 0 and train_set_sampling_ratio > 0:
+        sampled_train_list.append(train_list[-1])
+    train_list = sampled_train_list
+    del sampled_train_list
+
+    logger.info(
+        f"{len(train_list)=} "
+        f"{len(set(train_list))=} "
+        f"{len(validation_list)=} "
+        f"{len(test_list)=} \n"
+        f"{non_recurring_fault_set=!s:30} "
+        f"{non_recurring_list=}"
+        f"{non_recurring_fault_set_test=!s:30} "
+        f"{non_recurring_list_test=}"
+    )
+    return train_list, validation_list, test_list, non_recurring_list, non_recurring_fault_set, non_recurring_list_test, non_recurring_fault_set_test
+
+
+def get_non_recur_lists(
+        fault_df: pd.DataFrame, *, fdg: FDG = None
+) -> Tuple[List[int], List[int], List[int]]:
+    fault_type_2_id_list = defaultdict(list)
+    id_2_root_cause_node = {}
+    for idx, (_, fault) in enumerate(fault_df.iterrows()):
+        print(f"id: {idx}, fault: {fault}")
+        if fdg is not None:
+            fault_type = tuple(fdg.instance_to_class(_) for _ in fault['root_cause_node'].split(";"))
+        else:
+            fault_type = tuple(fault['node_type'].split(";"))
+        fault_type = list(fault_type)
+        fault_type.sort()
+        fault_type = tuple(fault_type)
+        fault_type_2_id_list[fault_type].append(idx)
+        id_2_root_cause_node[idx] = set(fault['root_cause_node'].split(";"))
+    non_recurring_fault_sets = []
+    for non_recurring_fault in list(fault_type_2_id_list.keys()):
+        s = set(non_recurring_fault)
+        if len(s)==1 and s not in non_recurring_fault_sets:
+            non_recurring_fault_sets.append(s)
+    return non_recurring_fault_sets
+
+
+def split_failures_by_drift(
+        fault_df: pd.DataFrame, *, fdg: FDG = None, split: Tuple[float, float, float] = (0.8, 0.2, 0.0), drift_time: int,
+        train_set_sampling_ratio: float = 1.0, balance_train_set: bool = False
+) -> Tuple[List[int], List[int], List[int]]:
+    rng = np.random.default_rng(233)  # the random seed should be fixed
+    fault_type_2_id_list = defaultdict(list)
+    id_2_root_cause_node = {}
+    test_list: List[int] = []
+    drift_list: List[int] = []
+    for idx, (_, fault) in enumerate(fault_df.iterrows()):
+        if fault['timestamp'] >= int(drift_time):
+            test_list.append(idx)
+            drift_list.append(idx)
+            continue
+        if fdg is not None:
+            fault_type = tuple(fdg.instance_to_class(_) for _ in fault['root_cause_node'].split(";"))
+        else:
+            fault_type = tuple(fault['node_type'].split(";"))
+        fault_type = list(fault_type)
+        fault_type.sort()
+        fault_type = tuple(fault_type)
+        fault_type_2_id_list[fault_type].append(idx)
+        id_2_root_cause_node[idx] = set(fault['root_cause_node'].split(";"))
+    logger.info(
+        f"fault ids with multiple root causes: "
+        f"{[(k, len(v)) for k, v in id_2_root_cause_node.items() if len(v) > 1]}"
+    )
+    train_ids_list: List[List[int]] = []
+    validation_list: List[int] = []
+    for fault_type, ids in fault_type_2_id_list.items():
+        _train_split = max(int(len(ids) * split[0]), 1)
+        _valid_split = max(int(len(ids) * (split[0] + split[1])), 1)
+        rng.shuffle(ids)
+
+        train_ids = ids[0:_train_split]
+        train_ids_list.append(train_ids)
+
+        validation_ids = ids[_train_split:_valid_split]
+        validation_list.extend(validation_ids)
+
+        test_ids = ids[_valid_split:]
+        test_list.extend(test_ids)
+
+        del _train_split, _valid_split
+
+        train_rc_nodes = reduce(lambda a, b: a | b, [id_2_root_cause_node[_] for _ in train_ids], set())
+        test_rc_nodes = list(id_2_root_cause_node[_] for _ in test_ids)
+        logger.info(
+            f"{fault_type=!s:30} \n"
+            f"train_length={len(train_ids):<5.0f} {train_ids=} \n"
+            f"validation_length={len(validation_ids):<5.0f} {validation_ids=} \n"
+            f"test_length={len(test_ids):<5.0f} {test_ids=} \n"
+            f"({len(list(filter(lambda _: _ <= train_rc_nodes, test_rc_nodes))):<3.0f} recurring faults)")
+        del train_ids, validation_ids, test_ids
+
+    if balance_train_set:
+        balanced_train_ids_list = []
+        max_length = max([len(_) for _ in train_ids_list])
+        for train_ids in train_ids_list:
+            oversampling_ratio = max_length // len(train_ids)
+            logger.info(f"repeat {train_ids} for {oversampling_ratio} times")
+            balanced_train_ids_list.append(train_ids * oversampling_ratio)
+        train_ids_list = balanced_train_ids_list
+        del oversampling_ratio, max_length, train_ids, balanced_train_ids_list
+
+    train_list = sum(train_ids_list, [])
+    del train_ids_list
+
+    sampled_train_list = []
+    for i in train_list:
+        if rng.random() <= train_set_sampling_ratio:
+            sampled_train_list.append(i)
+    # 除非train_set_sampling_ratio写成0，否则至少放一个训练数据
+    if len(sampled_train_list) == 0 and train_set_sampling_ratio > 0:
+        sampled_train_list.append(train_list[-1])
+    train_list = sampled_train_list
+    del sampled_train_list
+
+    num_train, num_valid, num_test, num_drift, num_non_drift = len(train_list), len(validation_list), len(test_list), len(drift_list), len(test_list) - len(drift_list)
+    failure_num = len(train_list) + len(validation_list) + len(test_list)
+    logger.info(
+        f"All {failure_num} failures: "
+        f"{num_train=} "
+        f"{len(set(train_list))=} "
+        f"{num_valid=} "
+        f"{num_test=} "
+    )
+    logger.info(
+        f"Train: Valid: Test = {num_train/failure_num:.2f}: {num_valid/failure_num:.2f}: {num_test/failure_num:.2f}"
+        f"In Test Set, drift: non-drift = {num_drift/num_test:.2f}: {num_non_drift/num_test:.2f}"
+    )
+    return train_list, validation_list, test_list, drift_list

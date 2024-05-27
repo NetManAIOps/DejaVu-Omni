@@ -53,9 +53,9 @@ class GAT(DejaVuModuleProtocol):
 
         self.predictor = NodeWeightPredictor(feature_size=feature_size * num_heads, has_dropout=has_dropout)
 
-    def forward(self, x: List[th.Tensor], graphs: List[dgl.DGLGraph]):
+    def forward(self, x: List[th.Tensor], graphs: List[dgl.DGLGraph], return_feat: bool=False):
         feat = self.feature_projector(x)  # (batch_size, N, feature_size)
-        batch_size, n_instances, _ = feat.size()
+        batch_size, n_instances, feature_size = feat.size()
 
         # select the features of the instances that are retained in the graphs
         feat = th.cat([feat[i, g.ndata[dgl.NID]] for i, g in enumerate(graphs)])
@@ -74,4 +74,29 @@ class GAT(DejaVuModuleProtocol):
         node_weights = self.predictor(agg_feat)  # (n_total_instances, feature_size)
         ret = th.zeros((batch_size, n_instances), dtype=x[0].dtype, device=x[0].device)
         ret[batch_graph.ndata['graph_id'], batch_graph.ndata[dgl.NID]] = node_weights
+        if return_feat:
+            feat_ret = th.zeros((batch_size, n_instances, feature_size), dtype=x[0].dtype, device=x[0].device)
+            feat_ret[batch_graph.ndata['graph_id'], batch_graph.ndata[dgl.NID]] = agg_feat
+            return ret, feat_ret
+        return ret
+    
+    def get_agg_feat(self, x: List[th.Tensor], graphs: List[dgl.DGLGraph]):
+        feat = self.feature_projector(x)  # (batch_size, N, feature_size)
+        batch_size, n_instances, feature_size = feat.size()
+
+        # select the features of the instances that are retained in the graphs
+        feat = th.cat([feat[i, g.ndata[dgl.NID]] for i, g in enumerate(graphs)])
+
+        feat = (self.feature_mapper(feat) + feat) / 2
+
+        batch_graph = dgl.batch(graphs)
+        batch_graph.ndata['graph_id'] = dgl.broadcast_nodes(
+            batch_graph, th.arange(len(graphs), device=batch_graph.device)[:, None]
+        )[:, 0]
+
+        agg_feat = feat
+        for GAT_aggregator in self.GAT_aggregators:
+            agg_feat = rearrange(GAT_aggregator(batch_graph, agg_feat), "N H F -> N (H F)")
+        ret = th.zeros((batch_size, n_instances, feature_size), dtype=x[0].dtype, device=x[0].device)
+        ret[batch_graph.ndata['graph_id'], batch_graph.ndata[dgl.NID]] = agg_feat
         return ret

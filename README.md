@@ -7,7 +7,6 @@
   - [Code](#code)
     - [Install](#install)
     - [Usage](#usage)
-    - [Example](#example)
   - [Datasets](#datasets)
   - [Deployment and Failure Injection Scripts of Train-Ticket](#deployment-and-failure-injection-scripts-of-train-ticket)
   - [Citation](#citation)
@@ -23,33 +22,44 @@
    ```
 2. Pull the code from GitHub
    ```bash
-   git pull https://github.com/NetManAIOps/DejaVu.git DejaVu
+   git pull https://github.com/NetManAIOps/DejaVu-Omni.git DejaVu-Omni
    ```
-3. Download the datasets following the link in the GitHub repo and extract the datasets into `./DejaVu/data`
+3. Download the datasets following the link in the GitHub repo and extract the datasets into `./DejaVu-Omni/data`
 4. I use the command `realpath` in the example commands below, which is not bundled in macOS and Windows. On macOS, you can install it by `brew install coreutils`.
 5. Start a Docker container with our image and enter its shell
    ```bash
-   docker run -it --rm -v $(realpath DejaVu):/workspace lizytalk/dejavu bash
+   docker run -it --rm -v $(realpath DejaVu-Omni):/workspace lizytalk/dejavu bash
    ```
 6. Run `direnv allow` in the shell of the Docker container to set the environment variables.
 7. Run experiments in the shell of the Docker container following the usage table as follows.
 
 
 ### Usage
-|Algorithm|Usage|
-|---|---|
-|DejaVu|Run for dataset A1: `python exp/run_GAT_node_classification.py -H=4 -L=8 -fe=GRU -bal=True --data_dir=data/A1`|
-|JSS'20|Run for dataset A1: `python exp/DejaVu/run_JSS20.py --data_dir=data/A1`|
-|iSQUAD|Run for dataset A1: `python exp/DejaVu/run_iSQ.py --data_dir=data/A1`|
-|Decision Tree|Run for dataset A1: `python exp/run_DT_node_classification.py --data_dir=data/A1`|
-|RandomWalk@Metric|Run for dataset A1: `python exp/DejaVu/run_random_walk_single_metric.py --data_dir=data/A1 --window_size 60 10 --score_aggregation_method=min`|
-|RandomWalk@FI|Run for dataset A1: `python exp/DejaVu/run_random_walk_failure_instance.py --data_dir=data/A1 --window_size 60 10 --anomaly_score_aggregation_method=min --corr_aggregation_method=max`|
-|Global interpretation|Run `notebooks/explain.py` as a jupyter notebook with `jupytext`|
-|Local interpretation|`DejaVu/explanability/similar_faults.py`|
+
+#### Fault Localization
+For fault localizaion, we can use four datasets (A, B, C and D). All scripts for DejaVu-Omni and baselines can be found in `scripts/fault_localization`. Run `bash scripts/fault_localization/run_all.sh` for all algorithms on four datasets.
 
 The commands would print a `one-line summary` in the end, including the following fields: `A@1`, `A@2`, `A@3`, `A@5`, `MAR`, `Time`, `Epoch`, `Valid Epoch`, `output_dir`, `val_loss`, `val_MAR`, `val_A@1`, `command`, `git_commit_url`, which are the desrired results.
 
-Totally, the main experiment commands of DejaVu should output as follows:
+#### Non-Recurring Failure Detection
+For non-recurring failure detection, we can use four datasets (A, B, C and D). All scripts for DejaVu-Omni and baselines can be found in `scripts/non_recurring_failure_detection`. Run `bash scripts/non_recurring_failure_detection/run_all.sh` for all algorithms on four datasets.
+
+The commands would print a `one-line summary`, including the following fields: `A@1`, `A@2`, `A@3`, `A@5`, `MAR`, `recur_A@1`, `recur_A@2`, `recur_A@3`, `recur_A@5`, `recur_MAR`, `Time`, `Epoch`, `Valid Epoch`, `output_dir`, `val_loss`, `val_MAR`, `val_A@1`, `command`, `git_commit_url`, which are the desrired results.
+
+Then, the commands would also print the threshold for non-reucrring failure detection together with precision, recall and f-score.
+
+#### Concept Drift Adaption after System Changes
+For concept drift adaption after system changes, we can dataset E. Firstly drift metrics using `notebooks/concept_drift_adaption.ipynb`, and then run fault localization for failures after system changes. All scripts for DejaVu-Omni and baselines can be found in `scripts/concept_drift_adaption`. Run `bash scripts/concept_drift_adaption/run_all.sh` for all algorithms.
+
+The commands would print a `one-line summary`, including the following fields: `A@1`, `A@2`, `A@3`, `A@5`, `MAR`, `drift_A@1`, `drift_A@2`, `drift_A@3`, `drift_A@5`, `drift_MAR`, `non_drift_A@1`, `non_drift_A@2`, `non_drift_A@3`, `non_drift_A@5`, `non_drift_MAR`, `Time`, `Epoch`, `Valid Epoch`, `output_dir`, `val_loss`, `val_MAR`, `val_A@1`, `command`, `git_commit_url`, which are the desrired results.
+
+#### Interpretation
+|Algorithm|Usage|
+|---|---|
+|Global interpretation|Run `notebooks/explain.py` as a jupyter notebook with `jupytext`|
+|Local interpretation|`DejaVu/explanability/similar_faults.py`|
+
+Totally, the main experiment commands of DejaVu-Omni should output as follows:
 - FDG message, including the data paths, edge types, the number of nodes (failure units), the number of metrics, the metrics of each failure class.
 - Traning setup message: the faults used for training, validation and testing.
 - Model architecture: model parameters in each part, total params
@@ -57,32 +67,18 @@ Totally, the main experiment commands of DejaVu should output as follows:
 - Time Report.
 - command output one-line summary.
 
-### Example
-See https://github.com/NetManAIOps/DejaVu/issues/4
-
 ## Datasets
 
-The datasets A, B, C, D are public at :
-- https://www.dropbox.com/sh/ist4ojr03e2oeuw/AAD5NkpAFg1nOI2Ttug3h2qja?dl=0
-- https://doi.org/10.5281/zenodo.6955909 (including the raw data of the Train-Ticket dataset)
-In each dataset, `graph.yml` or `graphs/*.yml` are FDGs, `metrics.csv` is metrics, and `faults.csv` is failures (including ground truths).
+The datasets A, B, C, D, E are public at :
+- https://www.dropbox.com/scl/fo/2jl3iem1dfuo3s7na7ebg/ALeZNJrcSg_jWvZsyPhBVMA?rlkey=ccfy5tnuwl18smrxt2m5lkgie&st=5q8yhby7&dl=0
+In each dataset, `graph.yml` or `graphs/*.yml` are FDGs, `metrics.csv` and `metrics.pkl` are metrics, `metrics.norm.csv` and `metrics.norm.pkl` are normalized metrics, and `faults.csv` is failures (including ground truths).
 `FDG.pkl` is a pickle of the FDG object, which contains all the above data.
 Note that the pickle files are not compatible in different Python and Pandas versions. So if you cannot load the pickles, just ignore and delete them. They are only used to speed up data load.
+Particulally, in dataset E which is used for concept drift adaption after system changes, `system_change.json` contains a change list, in which present a change with its start time and end time.
 
 ## Deployment and Failure Injection Scripts of Train-Ticket
 https://github.com/lizeyan/train-ticket
 
-## Citation
-``` bibtex
-@inproceedings{li2022actionable,
-  title = {Actionable and Interpretable Fault Localization for Recurring Failures in Online Service Systems},
-  booktitle = {Proceedings of the 2022 30th {{ACM Joint Meeting}} on {{European Software Engineering Conference}} and {{Symposium}} on the {{Foundations}} of {{Software Engineering}}},
-  author = {Li, Zeyan and Zhao, Nengwen and Li, Mingjie and Lu, Xianglin and Wang, Lixin and Chang, Dongdong and Nie, Xiaohui and Cao, Li and Zhang, Wenchi and Sui, Kaixin and Wang, Yanhua and Du, Xu and Duan, Guoqing and Pei, Dan},
-  year = {2022},
-  month = nov,
-  series = {{{ESEC}}/{{FSE}} 2022}
-}
-```
 
 ## Supplementary details
 ### Local interpretation

@@ -1,7 +1,8 @@
-from functools import lru_cache, cached_property
-from typing import List, Tuple, Dict, Optional, Union
+from functools import lru_cache, cached_property, partial
+from typing import List, Tuple, Dict, Optional, Union, Iterable
 
 import numpy as np
+import numba as nb
 import torch as th
 from pyprof import profile
 from pytorch_lightning.utilities import move_data_to_device
@@ -19,6 +20,7 @@ from utils.array_operation import forward_fill_na
 
 class MetricPreprocessor:
     def __init__(self, fdg: FDG, granularity=60, fill_na: bool = True, clip_value: Optional[float] = 10.):
+    # def __init__(self, fdg: FDG, granularity=60, fill_na: bool = True, clip_value: Optional[float] = 5.):
         self._granularity = granularity
         self._fill_na = fill_na
         self._clip_value = clip_value
@@ -36,25 +38,25 @@ class MetricPreprocessor:
             clip_value=clip_value,
         )
 
-        from einops import rearrange
-        self._flatten_features = th.cat(
-            [
-                rearrange(_, "n m t -> (n m) t")
-                for _ in self.features_list
-            ]
-        )
-        self._flatten_metric_instance_gids = th.cat([
-            th.tensor([gid for _ in fdg.FI_metrics_dict[fdg.gid_to_instance(gid)]])
-            for gid in range(fdg.n_failure_instances)
-        ])
-        self._flatten_metric_names = np.concatenate([
-            np.array([_ for _ in fdg.FI_metrics_dict[fdg.gid_to_instance(gid)]])
-            for gid in range(fdg.n_failure_instances)
-        ])
-        self._flatten_anomaly_direction_constraint = th.tensor([
-            {'u': 1, 'd': -1, 'b': 0}[fdg.anomaly_direction_constraint[_.split('##')[-1]]]
-            for _ in self._flatten_metric_names
-        ])
+        # from einops import rearrange
+        # self._flatten_features = th.cat(
+        #     [
+        #         rearrange(_, "n m t -> (n m) t")
+        #         for _ in self.features_list
+        #     ]
+        # )
+        # self._flatten_metric_instance_gids = th.cat([
+        #     th.tensor([gid for _ in fdg.FI_metrics_dict[fdg.gid_to_instance(gid)]])
+        #     for gid in range(fdg.n_failure_instances)
+        # ])
+        # self._flatten_metric_names = np.concatenate([
+        #     np.array([_ for _ in fdg.FI_metrics_dict[fdg.gid_to_instance(gid)]])
+        #     for gid in range(fdg.n_failure_instances)
+        # ])
+        # self._flatten_anomaly_direction_constraint = th.tensor([
+        #     {'u': 1, 'd': -1, 'b': 0}[fdg.anomaly_direction_constraint[_.split('##')[-1]]]
+        #     for _ in self._flatten_metric_names
+        # ])
 
     def to(self, device: Union[str, th.device]) -> 'MetricPreprocessor':
         self._features_list = move_data_to_device(self._features_list, device)
@@ -68,33 +70,41 @@ class MetricPreprocessor:
         """
         return self._features_list
 
-    @property
-    def flatten_features(self) -> th.Tensor:
-        """
-        :return: A tensor of the shape ((n_failure_classes, n_failure_instances, n_metrics), n_timestamps)
-        """
-        return self._flatten_features
+    # @property
+    # def flatten_features(self) -> th.Tensor:
+    #     """
+    #     :return: A tensor of the shape ((n_failure_classes, n_failure_instances, n_metrics), n_timestamps)
+    #     """
+    #     return self._flatten_features
 
-    @property
-    def flatten_metric_instance_gids(self) -> th.Tensor:
-        """
-        :return: The corresponding instance gids of the flattened features tensor
-        """
-        return self._flatten_metric_instance_gids
+    # @property
+    # def flatten_metric_instance_gids(self) -> th.Tensor:
+    #     """
+    #     :return: The corresponding instance gids of the flattened features tensor
+    #     """
+    #     return self._flatten_metric_instance_gids
 
-    @property
-    def flatten_anomaly_direction_constraint(self):
-        """
-        :return: +1 for up, -1 for down, 0 for both
-        """
-        return self._flatten_anomaly_direction_constraint
+    # @property
+    # def flatten_anomaly_direction_constraint(self):
+    #     """
+    #     :return: +1 for up, -1 for down, 0 for both
+    #     """
+    #     return self._flatten_anomaly_direction_constraint
 
-    @property
-    def flatten_metric_names(self) -> np.ndarray:
+    # @property
+    # def flatten_metric_names(self) -> np.ndarray:
+    #     """
+    #     :return: The corresponding metric names of the flattened features tensor
+    #     """
+    #     return self._flatten_metric_names
+
+    def metric_names_to_boolean_indices(self, metric_names: Iterable[str]) -> np.ndarray:
         """
-        :return: The corresponding metric names of the flattened features tensor
+        :param metric_names:
+        :return:
         """
-        return self._flatten_metric_names
+        metric_names = set(metric_names)
+        return np.array([_ in metric_names for _ in self.flatten_metric_names])
 
     @cached_property
     def timestamps(self) -> np.ndarray:
@@ -113,8 +123,13 @@ class MetricPreprocessor:
         start_ts = fault_ts - window_size[0] * self._granularity
         length = sum(window_size)
         timestamp_list = [start_ts + i * self._granularity for i in range(length)]
-        ts_idx = np.asarray([self._timestamp_2_idx[_] for _ in timestamp_list])
+        ts_idx = self.timestamps_to_indices(timestamp_list)
         return ts_idx
+
+    def timestamps_to_indices(self, timestamps: np.array) -> np.ndarray:
+        timestamps = np.asarray(timestamps, dtype=np.int)
+        func = np.vectorize(self._timestamp_2_idx.get)
+        return func(timestamps).astype(np.int)
 
     @lru_cache(maxsize=None)
     @profile
@@ -122,8 +137,7 @@ class MetricPreprocessor:
             self, fault_ts: int, window_size: Tuple[int, int] = (10, 10), batch_normalization: bool = True
     ) -> List[th.Tensor]:
         if batch_normalization:
-            def batch_rescale(feat):
-                return feat - th.nanmean(feat[..., :-window_size[1]], dim=-1, keepdim=True)
+            batch_rescale = partial(self.batch_normalization, window_size=window_size)
         else:
             def batch_rescale(feat):
                 return feat
@@ -132,6 +146,10 @@ class MetricPreprocessor:
 
         features_list = [batch_rescale(_[..., ts_idx]) for _ in self._features_list]
         return features_list
+
+    @staticmethod
+    def batch_normalization(arr: th.Tensor, window_size: Tuple[int, int] = (10, 10)):
+        return arr - th.nanmean(arr[..., :-window_size[1]], dim=-1, keepdim=True)
 
     @staticmethod
     @profile
@@ -184,15 +202,11 @@ class MetricPreprocessor:
                         # 通过之前的最近一个点填充
                         _feat = forward_fill_na(_feat, axis=-1)
 
-                        # 如果还没填充上的，通过全局的均值填充
-                        for i, j in zip(*np.where(np.any(np.isnan(_feat), axis=-1))):
-                            with profile("metric iter"):
-                                metric_name = fdg.FI_metrics_dict[fdg.failure_instances[failure_class][i]][j]
-                                np.nan_to_num(
-                                    _feat[i, j, :],
-                                    copy=False,
-                                    nan=fdg.metric_mean_dict.get(metric_name, -10)
-                                )
+                        _fill_feature_nan_with_metric_mean_values(
+                            _feat,
+                            fdg.FC_metrics_dict[failure_class],
+                            metric_mean_dict=fdg.metric_mean_dict_nb,
+                        )
                     assert np.all(np.isfinite(_feat))
 
                 if clip_value is not None:
@@ -208,6 +222,26 @@ class MetricPreprocessor:
                 ) == get_input_tensor_size_dict(fdg, (0, length))[failure_class], f"{features_list[-1].size()}"
         return features_list, timestamp_2_idx
 
+def _fill_feature_nan_with_metric_mean_values(
+        feat: np.ndarray, metrics: List[str],
+        metric_mean_dict: Dict[str, float]
+):
+    """
+    :param feat:  (n_instances, n_metrics, n_timestamps)
+    :param instances:
+    :param metric_names_dict:
+    :param metric_mean_dict:
+    :return:
+    """
+    for i in nb.prange(feat.shape[0]):
+        for j in nb.prange(feat.shape[1]):
+            metric_name = metrics[j]
+            mean_value = -10
+            if metric_name in metric_mean_dict:
+                mean_value = metric_mean_dict[metric_name]
+            for k in nb.prange(feat.shape[2]):
+                if np.isnan(feat[i, j, k]):
+                    feat[i, j, k] = mean_value
 
 @lru_cache
 def get_input_tensor_size_dict(fdg: FDG, window_size: Tuple[int, int]) -> Dict[str, th.Size]:

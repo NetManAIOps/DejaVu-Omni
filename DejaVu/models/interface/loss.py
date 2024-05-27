@@ -1,9 +1,24 @@
 import torch as th
 import torch.jit
 import torch.nn.functional as func
-import random
 from failure_dependency_graph import FDG
 from typing import DefaultDict, List
+import random
+
+
+@torch.jit.script
+def focal_loss(preds, labels, gamma: float = 2.):
+    preds = preds.view(-1, preds.size(-1))  # [-1, num_classes]
+    labels = labels.view(-1, 1)  # [-1, ]
+    preds_logsoft = func.log_softmax(preds, dim=-1)  # log_softmax
+    preds_softmax = th.exp(preds_logsoft)  # softmax
+    preds_softmax = preds_softmax.gather(1, labels)  # 这部分实现nll_loss ( crossempty = log_softmax + nll )
+    preds_logsoft = preds_logsoft.gather(1, labels)
+    weights = th.pow((1 - preds_softmax), gamma)
+    loss = - weights * preds_logsoft  # torch.pow((1-preds_softmax), self.gamma) 为focal loss中 (1-pt)**γ
+
+    loss = th.sum(loss) / th.sum(weights)
+    return loss
 
 
 # @torch.jit.script
@@ -29,81 +44,6 @@ def binary_classification_loss(
     return th.sum(loss * weights) / th.prod(th.tensor(weights.size()))
 
 
-def contrastive_loss(feat: th.Tensor, label: th.Tensor, cdp: FDG, w: float, n_samples: int) -> th.Tensor:
-    def pair_loss(feature1, feature2, label):
-        distance = th.sigmoid(func.pairwise_distance(feature1, feature2))
-        loss_same = label * th.pow(distance, 2)
-        loss_diff = (1 - label) * th.pow(th.clamp(1 - distance, min=0.0), 2)
-        loss_contrastive = th.mean(loss_same + loss_diff)
-        return loss_contrastive
-
-    valid_idx = th.where(th.any(label, dim=1))[0]
-    labels_list = [set(th.where(l >= 1)[0].tolist()) for l in label[valid_idx]]
-    clusters = DefaultDict(list)
-    feats_cluster_ext = []
-    i = 0
-    for feats, labels in zip(feat, labels_list):
-        # one instance can be delivered to multiple clusters.
-        for label in labels:
-            rc_type = cdp.instance_to_class(cdp.gid_to_instance(label))
-            feats_cluster_ext.append(th.mean(feats, dim=0)[None, :])
-            clusters[rc_type].append(i)
-            i += 1
-    feats_cluster = th.concat(feats_cluster_ext)
-
-    categories = list(clusters.keys())
-    positive_pairs, negative_pairs = [], []
-    n_positive = n_samples // 2
-    n_negative = n_samples - n_positive
-    for _ in range(n_positive):
-        category = random.choice(categories)
-        if len(clusters[category]) > 1:
-            sample1, sample2 = random.sample(clusters[category], 2)
-            positive_pairs.append((th.mean(feats_cluster[sample1], dim=0), th.mean(feats_cluster[sample2], dim=0), 1))
-    if len(categories) > 1:
-        for _ in range(n_negative):
-            category1, category2 = random.sample(categories, 2)
-            sample1 = random.choice(clusters[category1])
-            sample2 = random.choice(clusters[category2])
-            negative_pairs.append((th.mean(feats_cluster[sample1], dim=0), th.mean(feats_cluster[sample2], dim=0), 0))
-    all_pairs = positive_pairs + negative_pairs
-    random.shuffle(all_pairs)
-    feature1_list = [pair[0] for pair in all_pairs]
-    feature2_list = [pair[1] for pair in all_pairs]
-    labels_list = [pair[2] for pair in all_pairs]
-    feature1 = torch.stack(feature1_list)
-    feature2 = torch.stack(feature2_list)
-    labels = torch.tensor(labels_list, dtype=torch.float32, device=feature1.device)
-    loss = pair_loss(feature1, feature2, labels) * w
-    return loss
-
-
-@torch.jit.script
-def focal_loss(preds, labels, gamma: float = 2.):
-    preds = preds.view(-1, preds.size(-1))  # [-1, num_classes]
-    labels = labels.view(-1, 1)  # [-1, ]
-    preds_logsoft = func.log_softmax(preds, dim=-1)  # log_softmax
-    preds_softmax = th.exp(preds_logsoft)  # softmax
-    preds_softmax = preds_softmax.gather(1, labels)  # 这部分实现nll_loss ( crossempty = log_softmax + nll )
-    preds_logsoft = preds_logsoft.gather(1, labels)
-    weights = th.pow((1 - preds_softmax), gamma)
-    loss = - weights * preds_logsoft  # torch.pow((1-preds_softmax), self.gamma) 为focal loss中 (1-pt)**γ
-
-    loss = th.sum(loss) / th.sum(weights)
-    return loss
-
-
-@torch.jit.script
-def multi_classification_loss(prob: th.Tensor, label: th.Tensor, gamma: float = 2) -> th.Tensor:
-    assert prob.size() == label.size()
-    target_id = th.argmax(label, dim=-1)
-    assert len(prob.size()) == len(target_id.size()) + 1
-    if len(prob.size()) == 1:
-        return focal_loss(prob.view(1, -1), target_id.view(1), gamma=gamma)
-    else:
-        return focal_loss(prob, target_id, gamma=gamma)
-
-
 def cluster_loss(feat: th.Tensor, prob: th.Tensor, label: th.Tensor, cdp: FDG, w1: float, w2: float) -> th.Tensor:
     valid_idx = th.where(th.any(label, dim=1))[0]
     pred_list: List[List] = th.argsort(prob[valid_idx], dim=-1, descending=True).tolist()
@@ -120,6 +60,7 @@ def cluster_loss(feat: th.Tensor, prob: th.Tensor, label: th.Tensor, cdp: FDG, w
             clusters[rc_type].append(i)
             i += 1
     feats_cluster = th.concat(feats_cluster_ext)
+
     centers = []
     dists = []
     for cluster, value in clusters.items():
@@ -187,3 +128,63 @@ def feature_cluster_agg_loss(feat: th.Tensor, prob: th.Tensor, label: th.Tensor,
         loss_in_cluster = loss_in_cluster if loss_in_cluster==0 else w1/loss_in_cluster.detach()*loss_in_cluster
         loss_between_cluster = loss_between_cluster if loss_between_cluster==0 else w2/loss_between_cluster.detach()*loss_between_cluster
     return loss_in_cluster + loss_between_cluster
+
+
+def contrastive_loss(feat: th.Tensor, label: th.Tensor, cdp: FDG, w: float, n_samples: int) -> th.Tensor:
+    def contrastive_loss(feature1, feature2, label):
+        distance = th.sigmoid(func.pairwise_distance(feature1, feature2))
+        loss_same = label * th.pow(distance, 2)
+        loss_diff = (1 - label) * th.pow(th.clamp(1 - distance, min=0.0), 2)
+        loss_contrastive = th.mean(loss_same + loss_diff)
+        return loss_contrastive
+
+    valid_idx = th.where(th.any(label, dim=1))[0]
+    labels_list = [set(th.where(l >= 1)[0].tolist()) for l in label[valid_idx]]
+    clusters = DefaultDict(list)
+    feats_cluster_ext = []
+    i = 0
+    for feats, labels in zip(feat, labels_list):
+        # one instance can be delivered to multiple clusters.
+        for label in labels:
+            rc_type = cdp.instance_to_class(cdp.gid_to_instance(label))
+            feats_cluster_ext.append(th.mean(feats, dim=0)[None, :])
+            clusters[rc_type].append(i)
+            i += 1
+    feats_cluster = th.concat(feats_cluster_ext)
+
+    categories = list(clusters.keys())
+    positive_pairs, negative_pairs = [], []
+    n_positive = n_samples // 2
+    n_negative = n_samples - n_positive
+    for _ in range(n_positive):
+        category = random.choice(categories)
+        if len(clusters[category]) > 1:
+            sample1, sample2 = random.sample(clusters[category], 2)
+            positive_pairs.append((th.mean(feats_cluster[sample1], dim=0), th.mean(feats_cluster[sample2], dim=0), 1))
+    if len(categories) > 1:
+        for _ in range(n_negative):
+            category1, category2 = random.sample(categories, 2)
+            sample1 = random.choice(clusters[category1])
+            sample2 = random.choice(clusters[category2])
+            negative_pairs.append((th.mean(feats_cluster[sample1], dim=0), th.mean(feats_cluster[sample2], dim=0), 0))
+    all_pairs = positive_pairs + negative_pairs
+    random.shuffle(all_pairs)
+    feature1_list = [pair[0] for pair in all_pairs]
+    feature2_list = [pair[1] for pair in all_pairs]
+    labels_list = [pair[2] for pair in all_pairs]
+    feature1 = torch.stack(feature1_list)
+    feature2 = torch.stack(feature2_list)
+    labels = torch.tensor(labels_list, dtype=torch.float32, device=feature1.device)
+    loss = contrastive_loss(feature1, feature2, labels) * w
+    return loss
+
+
+@torch.jit.script
+def multi_classification_loss(prob: th.Tensor, label: th.Tensor, gamma: float = 2) -> th.Tensor:
+    assert prob.size() == label.size()
+    target_id = th.argmax(label, dim=-1)
+    assert len(prob.size()) == len(target_id.size()) + 1
+    if len(prob.size()) == 1:
+        return focal_loss(prob.view(1, -1), target_id.view(1), gamma=gamma)
+    else:
+        return focal_loss(prob, target_id, gamma=gamma)

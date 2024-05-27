@@ -1,5 +1,6 @@
 import pickle
 import warnings
+import json
 from functools import partial
 from pathlib import Path
 from typing import Callable, Optional, List, Any, Dict
@@ -7,6 +8,7 @@ from typing import Callable, Optional, List, Any, Dict
 import numpy as np
 import pytorch_lightning as pl
 import torch as th
+import pandas as pd
 from diskcache import Cache
 from loguru import logger
 from pyprof import profile, Profiler
@@ -22,6 +24,7 @@ from failure_dependency_graph import FDG, FDGBaseConfig
 from utils import count_parameters, plot_module_with_dot
 from utils.callbacks import EpochTimeCallback
 from utils.load_model import best_checkpoint
+from DejaVu.nonrecur_detect import *
 
 
 @profile("train_exp_CFL", report_printer=lambda _: logger.info(f"Time Report:\n{_}"))
@@ -92,8 +95,8 @@ def _train_exp_CFL(
         num_sanity_val_steps=-1,
         enable_progress_bar=False,
         gradient_clip_val=config.gradient_clip_val,
-        auto_select_gpus=True if config.cuda else False,
-        gpus=1 if config.cuda else 0,
+        # auto_select_gpus=True if config.cuda else False,
+        gpus=[config.gpu] if config.cuda else 0,
     )
     trainer.fit(model=model)
     logger.info(f"{trainer.checkpoint_callback.best_model_path=}")
@@ -110,7 +113,37 @@ def _train_exp_CFL(
     }
 
 
+def get_recur_df_callback(result: Dict, output_dir: Path, beta=1., recur_score=True, recur_loss='cluster'):
+    if recur_score:
+        recur_df: pd.DataFrame = result["model"].probs_df
+        non_recurring_list = result["model"].non_recurring_list
+        non_recurring_list_test = result["model"].non_recurring_list_test
+        pd.set_option('display.max_columns', None)
+        pd.set_option('display.max_rows', None)
+        logger.info(recur_df)
+        recur_df_train = recur_df[~recur_df.fault_id.isin(non_recurring_list_test)]
+        recur_df_test = recur_df[~recur_df.fault_id.isin(non_recurring_list)]
+        recur_df_train.to_csv(output_dir / f'ours_{recur_loss}_prob_train.csv', index=False)
+        recur_df_test.to_csv(output_dir / f'ours_{recur_loss}_prob_test.csv', index=False)
+        output_path = output_dir / f'ours_{recur_loss}_f{beta}_score.txt'
+        threshold = get_recur_threshold(recur_df_train, output_path, beta)
+        get_recur_fscore(recur_df_test, threshold, output_path, beta)
+        if recur_loss in ['mhgl', 'contrastive']:
+            interpret_feat_cluster(result["model"], threshold, output_dir, beta)
+    else:
+        if recur_loss == 'mhgl':
+            detect_nonrecur_mhgl(result["model"], output_dir, beta)
+        elif recur_loss == 'contrastive':
+            detect_nonrecur_contrastive(result["model"], output_dir, beta)
+        elif recur_loss == 'kmeans':
+            detect_nonrecur_Kmeans(result["model"], output_dir, beta)
+        elif recur_loss == 'gmm':
+            detect_nonrecur_GMM(result["model"], output_dir, beta)
+
+
+
 def _pickle_callback(result: Dict, output_dir: Path):
+
     model = result["model"]
     th.save(model.module, output_dir / 'module.pt')
 
@@ -127,13 +160,13 @@ def train_exp_CFL(
             # lambda *_: logger.info(f"parsed: {parse_log(config)}"),
             partial(_pickle_callback, output_dir=config.output_dir)
         ]
+        if config.dataset_split_method == 'recur':
+            after_callbacks.append(partial(get_recur_df_callback, output_dir=config.output_dir, beta=config.non_recur_beta, recur_score=config.recur_score, recur_loss=config.recur_loss))
     result = _train_exp_CFL(config, get_model, plot_model=plot_model)
     # after hooks
     for callback in after_callbacks:
-        try:
-            callback(result)
-        except Exception as e:
-            logger.error(f"Run callback error: {e!r}")
+        callback(result)
+    logger.remove()
     print(f"train finished. saved to {config.output_dir}")
 
 
@@ -165,17 +198,13 @@ def __train_exp_sklearn_classifier(config: DejaVuConfig, get_model: Callable[[FD
         feature_names, (
             (train_x, train_y, _, _), _, (test_x, _, fault_ids, node_names)
         ) = dataset[node_type]
-        if len(np.unique(train_y)) > 1:
-            model = get_model(cdp, config)
-            with profile("Training"):
-                model.fit(train_x, train_y)
-            models[node_type] = model
-            with open(config.output_dir / f"{model.__class__}.{node_type=}.pkl", 'wb+') as f:
-                pickle.dump(model, f)
-            _y_probs = model.predict_proba(test_x)
-        else:
-            _y_probs = np.zeros((len(test_x), 2), dtype=np.float32)
-            _y_probs[:, 0] = 1.0
+        model = get_model(cdp, config)
+        with profile("Training"):
+            model.fit(train_x, train_y)
+        models[node_type] = model
+        with open(config.output_dir / f"{model.__class__}.{node_type=}.pkl", 'wb+') as f:
+            pickle.dump(model, f)
+        _y_probs = model.predict_proba(test_x)
         for fault_id, node_name, prob in zip(fault_ids, node_names, _y_probs):
             with profile("Inference for each failure"):
                 y_probs[test_fault_ids.index(fault_id), cdp.instance_to_gid(node_name)] = 1 - prob[0].item()
@@ -197,11 +226,37 @@ def train_exp_sklearn_classifier(config: DejaVuConfig, get_model: Callable[[FDG,
 
 
 def format_result_string(metrics: Dict[str, float], profiler: Profiler, config: FDGBaseConfig) -> str:
-    return (
-        f"command output one-line summary: "
-        f"{metrics['A@1'] * 100:.2f},{metrics['A@2'] * 100:.2f},{metrics['A@3'] * 100:.2f},"
-        f"{metrics['A@5'] * 100:.2f},{metrics['MAR']:.2f},"
-        f"{profiler.total},{''},{''},{config.output_dir},{''},{''},{''},"
-        f"{config.get_reproducibility_info()['command_line']},"
-        f"{config.get_reproducibility_info().get('git_url', '')}"
-    )
+    if config.dataset_split_method == 'type':
+        return (
+            f"command output one-line summary: "
+            f"{metrics['A@1'] * 100:.2f},{metrics['A@2'] * 100:.2f},{metrics['A@3'] * 100:.2f},"
+            f"{metrics['A@5'] * 100:.2f},{metrics['MAR']:.2f},"
+            f"{profiler.total},{''},{''},{config.output_dir},{''},{''},{''},"
+            f"{config.get_reproducibility_info()['command_line']},"
+            f"{config.get_reproducibility_info().get('git_url', '')}"
+        )
+    elif config.dataset_split_method == 'recur':
+        return (
+            f"command output one-line summary: "
+            f"{metrics['A@1'] * 100:.2f},{metrics['A@2'] * 100:.2f},{metrics['A@3'] * 100:.2f},"
+            f"{metrics['A@5'] * 100:.2f},{metrics['MAR']:.2f},"
+            f"{metrics['recur_A@1'] * 100:.2f},{metrics['recur_A@2'] * 100:.2f},{metrics['recur_A@3'] * 100:.2f},"
+            f"{metrics['recur_A@5'] * 100:.2f},{metrics['recur_MAR']:.2f},"
+            f"{profiler.total},{''},{''},{config.output_dir},{''},{''},{''},"
+            f"{config.get_reproducibility_info()['command_line']},"
+            f"{config.get_reproducibility_info().get('git_url', '')}"
+        )
+    elif config.dataset_split_method == 'drift':
+        return (
+            f"command output one-line summary: "
+            f"{metrics['A@1'] * 100:.2f},{metrics['A@2'] * 100:.2f},{metrics['A@3'] * 100:.2f},"
+            f"{metrics['A@5'] * 100:.2f},{metrics['MAR']:.2f},"
+            f"{metrics['drift_A@1'] * 100:.2f},{metrics['drift_A@2'] * 100:.2f},{metrics['drift_A@3'] * 100:.2f},"
+            f"{metrics['drift_A@5'] * 100:.2f},{metrics['drift_MAR']:.2f},"
+            f"{metrics['non_drift_A@1'] * 100:.2f},{metrics['non_drift_A@2'] * 100:.2f},{metrics['non_drift_A@3'] * 100:.2f},{metrics['non_drift_A@5'] * 100:.2f},{metrics['non_drift_MAR']:.2f},"
+            f"{profiler.total},{''},{''},{config.output_dir},{''},{''},{''},"
+            f"{config.get_reproducibility_info()['command_line']},"
+            f"{config.get_reproducibility_info().get('git_url', '')}"
+        )
+    else:
+        return ""

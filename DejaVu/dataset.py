@@ -23,7 +23,7 @@ from failure_dependency_graph.incomplete_FDG_factory import IncompleteFDGFactory
 
 from utils.metric_augmentation import add_missing_to_tensor, add_spike_to_tensor
 from failure_dependency_graph import FDG
-from failure_dependency_graph.model_interface import split_failures_by_type, FDGModelInterface
+from failure_dependency_graph.model_interface import split_failures_by_type, split_failures_by_drift, FDGModelInterface
 from metric_preprocess import MetricPreprocessor
 
 
@@ -68,13 +68,14 @@ class DejaVuDataset(th.utils.data.Dataset):
             self.__getitem__.cache_clear()
         return self
 
-    @lru_cache
+    @lru_cache(maxsize=None)
     def __len__(self):
         actual_len = len(self.fault_ids)
         normal_len = int(actual_len * self.normal_data_weight)
         return actual_len + normal_len
 
     @profile
+    # return (feature_list, labels, fault_id, graph)
     def __getitem__(self, index) -> Tuple[List[th.Tensor], th.Tensor, int, dgl.DGLGraph]:
         fault_idx = index % len(self.fault_ids)
         fault_id = self.fault_ids[fault_idx]
@@ -93,8 +94,11 @@ class DejaVuDataset(th.utils.data.Dataset):
         labels = th.zeros((self.cdp.n_failure_instances,), dtype=th.float32)
         if bias == 0:
             for rc_node in self.cdp.root_cause_instances_of(fault_id):
-                target_id = th.tensor(self.cdp.instance_to_gid(rc_node))
-                labels[target_id] = 1
+                try:
+                    target_id = th.tensor(self.cdp.instance_to_gid(rc_node))
+                    labels[target_id] = 1
+                except:
+                    pass
         else:
             pass  # 正常数据
 
@@ -182,6 +186,62 @@ def prepare_sklearn_dataset(
     del feature_extractor
     train_fault_ids, validation_fault_ids, test_fault_ids = split_failures_by_type(
         cdp.failures_df, fdg=cdp, split=config.dataset_split_ratio, train_set_sampling_ratio=config.train_set_sampling,
+    )
+    train_fault_ids = set(train_fault_ids)
+    validation_fault_ids = set(validation_fault_ids)
+    # test_fault_ids = set(test_fault_ids)
+    rst = {}
+    for node_type in cdp.failure_classes:
+        assert node_type in ts_features_dict, f"{ts_features_dict.keys()=} {cdp.failure_classes=}"
+        ts_feats = ts_features_dict[node_type].replace([np.nan, np.inf, -np.inf], 0)
+        _data = []
+        for i, (index, row) in enumerate(ts_feats.iterrows()):
+            match = re.match(r'fault_id=(?P<id>\d+)\.node=\'(?P<node>.*)\'', index)
+            fault_id = int(match.group('id'))
+            node = match.group('node')
+            rc_node = cdp.failure_at(fault_id)['root_cause_node']
+            _data.append((
+                0 if fault_id in train_fault_ids else (1 if fault_id in validation_fault_ids else 2),
+                row.values,
+                int(rc_node == node),
+                fault_id,
+                node,
+            ))
+        key_func = lambda _: _[0]
+        _data = sorted(_data, key=key_func)
+        _x_list, _y_list, _fault_ids, _node_names = [], [], [], []
+        for _, _parted_data in groupby(_data, key=key_func):
+            _parted_data = list(_parted_data)
+            _x_list.append(np.vstack([_[1] for _ in _parted_data]))
+            _y_list.append(np.array([_[2] for _ in _parted_data]))
+            _fault_ids.append(list([_[3] for _ in _parted_data]))
+            _node_names.append(list([_[4] for _ in _parted_data]))
+        rst[node_type] = (
+            list(ts_feats.columns),
+            (
+                (_x_list[0], _y_list[0], _fault_ids[0], _node_names[0]),
+                (_x_list[1], _y_list[1], _fault_ids[1], _node_names[1]),
+                (_x_list[2], _y_list[2], _fault_ids[2], _node_names[2]),
+            )
+        )
+
+    return rst, (list(train_fault_ids), list(validation_fault_ids), list(test_fault_ids))
+
+
+def prepare_sklearn_dataset_drift(
+        cdp: FDG, config: DejaVuConfig, cache: Cache, mode: str, drift_ts: int
+) -> SKLEARN_DATASET_TYPE:
+    from DejaVu.explanability import prepare_ts_feature_dataset
+    feature_extractor = FDGModelInterface.get_metric_preprocessor(fdg=cdp, config=config, cache=cache)
+    ts_feature_key = f'TS-Feature-{mode=}'
+    if ts_feature_key not in cache or config.flush_dataset_cache:
+        cache.set(ts_feature_key, prepare_ts_feature_dataset(
+            fdg=cdp, fe=feature_extractor, window_size=config.window_size, mode=mode,
+        ))
+    ts_features_dict = cache.get(ts_feature_key)
+    del feature_extractor
+    train_fault_ids, validation_fault_ids, test_fault_ids, drift_list = split_failures_by_drift(
+        cdp.failures_df, fdg=cdp, split=config.dataset_split_ratio, train_set_sampling_ratio=config.train_set_sampling, drift_time=drift_ts
     )
     train_fault_ids = set(train_fault_ids)
     validation_fault_ids = set(validation_fault_ids)

@@ -11,7 +11,7 @@ def top_k_accuracy(y_true: List[Set[Any]], y_pred: List[List[Any]], k=1, printer
     for a, b in zip(y_true, y_pred):
         left = a
         right = set(b[:k])
-        if left <= right:
+        if len(left) != 0 and left <= right:
             cnt += 1
         else:
             if printer:
@@ -25,6 +25,8 @@ top_3_accuracy = partial(top_k_accuracy, k=3)
 
 
 def get_rank(y_true: Set[Any], y_pred: List[Any], max_rank: Optional[int] = None) -> List[float]:
+    if len(y_true) == 0:
+        return [ max_rank+1 ]
     rank_dict = defaultdict(lambda: len(y_pred) + 1 if max_rank is None else (max_rank + len(y_pred)) / 2)
     for idx, item in enumerate(y_pred, start=1):
         if item in y_true:
@@ -55,6 +57,7 @@ def get_evaluation_metrics_dict(y_true: List[Set[Any]], y_pred: List[List[Any]],
         "A@3": top_3_accuracy(y_true, y_pred),
         "A@5": top_k_accuracy(y_true, y_pred, k=5),
         "MAR": MAR(y_true, y_pred, max_rank=max_rank),
+        "MFR": MFR(y_true, y_pred, max_rank=max_rank),
     }
     return metrics
 

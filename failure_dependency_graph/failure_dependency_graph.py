@@ -1,19 +1,20 @@
+import pickle
 from collections import defaultdict
 from functools import lru_cache, reduce, cached_property
 from itertools import groupby
 from pathlib import Path
 from pprint import pformat
-from typing import Tuple, Dict, List, Set, Union, Callable, Optional
+from typing import Tuple, Dict, List, Set, Union, Callable, Optional, Iterable
 
 import dgl
 import networkx as nx
 import numpy as np
 import pandas as pd
-import pickle
 import torch as th
 from dgl import DGLHeteroGraph, heterograph
 from loguru import logger
 from networkx import DiGraph
+from numpy.lib.stride_tricks import sliding_window_view
 from pyprof import profile
 
 __all__ = [
@@ -22,7 +23,7 @@ __all__ = [
 
 from failure_dependency_graph.generate_virtual_FDG import generate_virtual_FDG
 from failure_dependency_graph.parse_yaml_graph_config import parse_yaml_graph_config
-from utils import read_dataframe
+from utils import read_dataframe, py_object_to_nb_object
 
 
 class FDG:
@@ -51,7 +52,8 @@ class FDG:
         assert failure_graphs is None or len(failure_graphs) == len(failures), \
             f"The length of {len(failure_graphs)=} should be equal to the length of {len(failures)=}"
         if failure_graphs is None:
-            failure_graphs = [graph.copy() for _ in range(len(failures))]
+            # noinspection PyTypeChecker
+            failure_graphs: List[DiGraph] = [graph.copy() for _ in range(len(failures))]
         if graph is None:
             graph = nx.compose_all(failure_graphs)
         self._nx_overall_graph = graph
@@ -63,6 +65,7 @@ class FDG:
                 graph.nodes(data=True), key=lambda _: _[1]['type']
             ), key=lambda _: _[1]['type'])
         ))
+
         self._node_to_idx: Dict[str, Dict[str, int]] = {
             node_type: {node: idx for idx, node in enumerate(node_list)}
             for node_type, node_list in self._node_list.items()
@@ -92,8 +95,6 @@ class FDG:
 
         self._faults_df = failures
 
-        self._metric_mean_dict: Dict[str, float] = self._metrics_df.groupby('name')['value'].mean().to_dict()
-
         logger.info(f"the number of nodes: {self.n_failure_instances}")
         logger.info(f"all ({len(self.failure_classes)}) node types: {self.failure_classes}")
         logger.info(f"the number of metrics: "
@@ -117,8 +118,11 @@ class FDG:
             use_anomaly_direction_constraint: bool = False,
             return_real_path: bool = False,
             loaded_FDG: Optional['FDG'] = None,
+            flush_dataset_cache: bool = False,
+            non_recurring_fault_set: Optional[set] = None
     ) -> Union['FDG', Tuple['FDG', Dict]]:
         """
+        :param flush_dataset_cache: If False, try to load the FDG from pickle in `dir_path`
         :param dir_path: read "graph.yaml", "metrics.norm.pkl", and "faults.csv" in this directory by default
         :param graph_path: overwrite the default graph path
         :param metrics_path: overwrite the default metrics path
@@ -126,6 +130,7 @@ class FDG:
         :param use_anomaly_direction_constraint: whether to use anomaly direction constraint
         :param return_real_path: whether to return the real path of the loaded files
         :param loaded_FDG: if not None, use the given FDG instead of loading from files
+        :param non_recurring_fault_set: if not None, delete recurring failure types in FDG
         :return: a FDG object,
             (optional) and a dict of the real paths of the loaded files whose keys are 'graph', 'metrics', and 'faults'
         """
@@ -149,6 +154,7 @@ class FDG:
 
             assert dir_path.is_dir() and dir_path.exists(), dir_path
         graph_path = dir_path / 'graph.yml' if graph_path is None else Path(graph_path)
+        # metrics_path = dir_path / "metrics.pkl" if metrics_path is None else Path(metrics_path)
         metrics_path = dir_path / "metrics.norm.pkl" if metrics_path is None else Path(metrics_path)
         faults_path = dir_path / "faults.csv" if faults_path is None else Path(faults_path)
         if not graph_path.exists():
@@ -156,13 +162,15 @@ class FDG:
         assert metrics_path.exists(), metrics_path
         assert faults_path.exists(), faults_path
 
-        if not loaded_FDG:
+        if not loaded_FDG or non_recurring_fault_set != None:
             fdg = FDG._load_FDG(
                 dir_path=dir_path,
                 graph_path=graph_path,
                 metrics_path=metrics_path,
                 faults_path=faults_path,
                 use_anomaly_direction_constraint=use_anomaly_direction_constraint,
+                flush_dataset_cache=flush_dataset_cache,
+                non_recurring_fault_set=non_recurring_fault_set,
             )
         else:
             fdg = loaded_FDG
@@ -174,7 +182,7 @@ class FDG:
     @staticmethod
     def _load_FDG(
             dir_path: Path, graph_path: Optional[Path], faults_path: Path, metrics_path: Path,
-            use_anomaly_direction_constraint: bool,
+            use_anomaly_direction_constraint: bool, flush_dataset_cache=False, non_recurring_fault_set: Optional[set]=None
     ):
         if not use_anomaly_direction_constraint:
             anomaly_direction_constraint = {}
@@ -202,21 +210,23 @@ class FDG:
         pickled_FDG_path: Path = dir_path / "FDG.pkl"
         is_loaded_from_pickle = False
         try:
-            if pickled_FDG_path.exists() and pickled_FDG_path.stat().st_mtime >= latest_source_modification_time:
+            if pickled_FDG_path.exists() \
+                    and pickled_FDG_path.stat().st_mtime >= latest_source_modification_time \
+                    and not flush_dataset_cache:
                 logger.info(f"Loading FDG from {pickled_FDG_path}")
                 with open(pickled_FDG_path, 'rb') as f:
                     fdg = pickle.load(f)
                     is_loaded_from_pickle = True
-        except pickle.PickleError as e:
+        except Exception as e:
             logger.exception("Read pickled FDG error", exception=e)
         if not is_loaded_from_pickle:
             if len(failures_graph_paths) == len(failures_df):
-                failure_graphs = [parse_yaml_graph_config(_) for _ in failures_graph_paths]
+                failure_graphs = [FDG.modify_graph_by_node_type(parse_yaml_graph_config(_), non_recurring_fault_set) for _ in failures_graph_paths]
             else:
                 failure_graphs = None
             logger.debug(f"Load CDP: {graph_path=} {metrics_path=} {faults_path=} {failures_graph_paths=}")
             fdg = FDG(
-                graph=parse_yaml_graph_config(graph_path) if graph_path is not None else None,
+                graph=FDG.modify_graph_by_node_type(parse_yaml_graph_config(graph_path), non_recurring_fault_set) if graph_path is not None else None,
                 failure_graphs=failure_graphs,
                 metrics=read_dataframe(metrics_path),
                 failures=failures_df,
@@ -227,6 +237,17 @@ class FDG:
         else:
             fdg = fdg  # trick IDE
         return fdg
+    
+    @staticmethod
+    def modify_graph_by_node_type(g: nx.DiGraph, node_types: Optional[set] = None):
+        '''
+        delete nodes and edges from g where node type in `node_types`.
+        '''
+        if node_types is None:
+            return g
+        nodes = [node_index for node_index, node_attr in g.nodes(data=True) if node_attr['type'] in node_types]
+        g.remove_nodes_from(nodes)
+        return g
 
     #######################
     # Metrics
@@ -243,7 +264,37 @@ class FDG:
         """
         :return: The average value of each metric
         """
-        return self._metric_mean_dict
+        return self._metrics_df.groupby('name')['value'].mean().to_dict()
+
+    @cached_property
+    def metric_mean_dict_nb(self):
+        return py_object_to_nb_object(self.metric_mean_dict)
+
+    @cached_property
+    def metric_max_dict(self) -> Dict[str, float]:
+        ret = {m: 0 for m in self.metrics}
+        ret.update(self._metrics_df.groupby('name')['value'].max().to_dict())
+        return ret
+
+    @cached_property
+    def metric_min_dict(self) -> Dict[str, float]:
+        ret = {m: 0 for m in self.metrics}
+        ret.update(self._metrics_df.groupby('name')['value'].min().to_dict())
+        return ret
+
+    @cached_property
+    def metric_kind_max_dict(self) -> Dict[str, float]:
+        return {
+            metric_kind: max([self.metric_max_dict[m] for m in metrics])
+            for metric_kind, metrics in self.metric_kinds_to_metrics_dict.items()
+        }
+
+    @cached_property
+    def metric_kind_min_dict(self) -> Dict[str, float]:
+        return {
+            metric_kind: min([self.metric_min_dict[m] for m in metrics])
+            for metric_kind, metrics in self.metric_kinds_to_metrics_dict.items()
+        }
 
     @property
     def metric_number_dict(self) -> Dict[str, int]:
@@ -259,12 +310,48 @@ class FDG:
         """
         return self._node_metrics_dict
 
+    @cached_property
+    def FI_metrics_dict_nb(self):
+        return py_object_to_nb_object(self.FI_metrics_dict)
+    
+    @cached_property
+    def FI_component_metrics_dict(self) -> Dict[str, List[str]]:
+        """
+        :return: The list of component metrics of each failure instance
+        """
+        ret: Dict[str, List[str]] = {}
+        for key, value in self.failure_instance_to_component_dict.items():
+            ret[key] = self.component_to_metrics_dict[value]
+        return ret
+    
+    @cached_property
+    def FI_component_metrics_dict_nb(self):
+        return py_object_to_nb_object(self.FI_component_metrics_dict)
+
     @property
     def FC_metrics_dict(self) -> Dict[str, List[str]]:
         """
-        :return: The list of metrics of each failure classes
+        :return: The list of metrics of each failure class
         """
         return self._node_type_metrics_dict
+
+    @cached_property
+    def metric_kinds_to_metrics_dict(self) -> Dict[str, Set[str]]:
+        """
+        :return: The list of metrics of each metric kind
+        """
+        ret = defaultdict(set)
+        for metric in self.metrics:
+            ret[metric.split("##")[1]].add(metric)
+        return dict(ret)
+
+    @cached_property
+    def metric_kinds(self) -> Set[str]:
+        return set(self.metric_kinds_to_metrics_dict.keys())
+
+    @cached_property
+    def metrics(self) -> List[str]:
+        return list(self.metric_to_FI_list_dict.keys())
 
     @cached_property
     def metric_to_FI_list_dict(self) -> Dict[str, List[str]]:
@@ -288,6 +375,205 @@ class FDG:
         return self._anomaly_direction_constraint
 
     #######################
+    # Components
+    #######################
+    @cached_property
+    def components(self) -> List[str]:
+        """
+        :return: The set of components
+        """
+        return sorted(list({_.split("##")[0] for _ in self.metrics}))
+    
+    @cached_property
+    def component_fi_index_project_list(self) -> List[int]:
+        tmp = []
+        for component_class in self.component_classes:
+            for component in self.component_class_to_components_dict[component_class]:
+                for fi in self.component_to_failure_instances_dict[component]:
+                    tmp.append(self.instance_to_gid(fi))
+        ret = np.empty(len(tmp), dtype=int)
+        for i, index in enumerate(tmp):
+            ret[index] = i
+        return list(ret)
+
+    @lru_cache(maxsize=None)
+    def get_component_neighbor(self, component: str) -> List[str]:
+        """
+        :param component: The component
+        :return: The list of neighbor components
+        """
+        assert component in self.components, f"{component=} is not in {self.components=}"
+        failure_instances = self.component_to_failure_instances_dict[component]
+        neighbor_failure_instances = set.union(*[
+            set(self.get_failure_instance_neighbors(fi)) for fi in failure_instances
+        ])
+        neighbor_component_node_types_dist = {
+                                  self.failure_instance_to_component_dict[fi] for fi in neighbor_failure_instances
+                              } - {component}
+        return sorted(list(neighbor_component_node_types_dist))
+
+    @cached_property
+    def failure_instance_to_component_dict(self) -> Dict[str, str]:
+        """
+        :return: The mapping from failure instance to component
+        """
+        ret: Dict[str, str] = {}
+        for fi, metrics in self.FI_metrics_dict.items():
+            failure_instances = list({_.split("##")[0] for _ in metrics})
+            assert len(failure_instances) == 1, \
+                f"The failure instance {fi} has more than one component. It contains {metrics}"
+            ret[fi] = failure_instances[0]
+        return ret
+
+    @cached_property
+    def component_to_failure_instances_dict(self) -> Dict[str, List[str]]:
+        """
+        key: Each component
+        value: The list of failure instances belonging to the component
+        :return:
+        """
+        ret = defaultdict(set)
+        for fi, component in self.failure_instance_to_component_dict.items():
+            ret[component].add(fi)
+        return {
+            k: sorted(list(v)) for k, v in ret.items()
+        }
+    
+    @cached_property
+    def fi_to_component_class_dict(self) -> Dict[str, str]:
+        """
+        :return: The mapping from failure instance to component class
+        """
+        ret: Dict[str, str] = {}
+        for fi, metrics in self.FI_metrics_dict.items():
+            failure_instances = list({_.split("##")[0] for _ in metrics})
+            assert len(failure_instances) == 1, \
+                f"The failure instance {fi} has more than one component. It contains {metrics}"
+            ret[fi] = failure_instances[0].split('_')[0]
+        return ret
+
+    @cached_property
+    def component_class_to_fi_dict(self) -> Dict[str, List[str]]:
+        """
+        key: Each component class
+        value: The list of failure instances belonging to the component class
+        :return:
+        """
+        ret = defaultdict(set)
+        for fi, component in self.fi_to_component_class_dict.items():
+            ret[component].add(fi)
+        return {
+            k: sorted(list(v)) for k, v in ret.items()
+        }
+    
+    @cached_property
+    def component_class_to_components_dict(self) -> Dict[str, List[str]]:
+        """
+        key: Each component class
+        value: The list of components belonging to the component class
+        :return:
+        """
+        component_classes = defaultdict(list)
+        for component in self.components:
+            metric_kinds = frozenset({_.split("##")[1] for _ in self.component_to_metrics_dict[component]})
+            # if metric_kinds == frozenset({'fake'}):
+            #     continue
+            component_classes[metric_kinds].append(component)
+        ret = dict()
+        for k, v in component_classes.items():
+            components = sorted(v)
+            ret[components[0]+'_like'] = components
+        return ret
+    
+    @cached_property
+    def component_to_component_class_dict(self) -> Dict[str, List[str]]:
+        ret = {}
+        for component_class, components in self.component_class_to_components_dict.items():
+            for component in components:
+                ret[component] = component_class
+        return ret
+
+    @cached_property
+    def component_class_to_components_dict_nb(self):
+        return py_object_to_nb_object(self.component_class_to_components_dict)
+
+    @cached_property
+    def component_to_failure_instances_nb(self):
+        return py_object_to_nb_object(self.component_to_failure_instances_dict)
+
+    @cached_property
+    def component_class_to_fi_size_dict(self) -> Dict[str, int]:
+        """
+        key: Each component class
+        value: The number of failure instances belonging to the component class
+        :return:
+        """
+        return {
+            k: len(self.component_to_failure_instances_dict[v[0]]) for k, v in self.component_class_to_components_dict.items()
+        }
+    
+    @cached_property
+    def component_to_metrics_dict(self) -> Dict[str, List[str]]:
+        """
+        :return: The mapping from components to metrics
+        """
+        ret = dict()
+        for component in self.components:
+            fi_list = self.component_to_failure_instances_dict[component]
+            ret[component] = sorted(list(set.union(*[
+                set(self.FI_metrics_dict[fi]) for fi in fi_list
+            ])))
+        return ret
+    
+    @cached_property
+    def component_to_metrics_dict_nb(self):
+        return py_object_to_nb_object(self.component_to_metrics_dict)
+    
+    @cached_property
+    def component_class_metrics_number_dict(self) -> Dict[str, List[str]]:
+        """
+        :return: The number of metrics of each component class
+        """
+        ret = dict()
+        for component_class in self.component_classes:
+            components = self.component_class_to_components_dict[component_class]
+            ret[component_class] = len(self.component_to_metrics_dict[components[0]])
+        return ret
+
+    @lru_cache(maxsize=None)
+    def get_failure_instance_from_component_and_class(self, component: str, failure_class: str) -> str:
+        _ret = set(self.component_to_failure_instances_dict[component]) & set(self.failure_instances[failure_class])
+        assert len(_ret) == 1, \
+            f"{set(self.component_to_failure_instances_dict[component])=} " \
+            f"{set(self.failure_instances[failure_class])}"
+        return _ret.pop()
+
+    @cached_property
+    def component_in_classes(self) -> List[List[str]]:
+        component_classes = defaultdict(list)
+        for component in self.components:
+            metric_kinds = frozenset({_.split("##")[1] for _ in self.component_to_metrics_dict[component]})
+            # if metric_kinds == frozenset({'fake'}):
+            #     continue
+            component_classes[metric_kinds].append(component)
+        return [sorted(v) for k, v in component_classes.items()]
+
+    @cached_property
+    def component_to_class_dict(self) -> Dict[str, List[str]]:
+        ret = {}
+        for component_class in self.component_in_classes:
+            for component in component_class:
+                ret[component] = component_class
+        return ret
+
+    @cached_property
+    def component_classes(self) -> List[str]:
+        """
+        :return: The components classes
+        """
+        return sorted([components[0]+'_like' for components in self.component_in_classes])
+
+    #######################
     # Nodes
     #######################
     @property
@@ -304,6 +590,17 @@ class FDG:
         """
         return self._node_list
 
+    def get_failure_instance_neighbors(self, failure_instance: str) -> List[str]:
+        """
+        :param failure_instance: The failure instance
+        :return: The list of neighbors of the failure instance
+        """
+        return sorted(list(self._nx_overall_graph.neighbors(failure_instance)))
+
+    @cached_property
+    def failure_instances_nb(self):
+        return py_object_to_nb_object(self.failure_instances)
+
     @cached_property
     def flatten_failure_instances(self) -> List[str]:
         """
@@ -314,6 +611,19 @@ class FDG:
     @property
     def failure_classes(self) -> List[str]:
         return self._node_types
+
+    @cached_property
+    def invalid_failure_class_indices(self) -> List[int]:
+        """
+        从来不作为根因的failure class的indices
+        :return:
+        """
+        all_failure_classes_set = set(self.failure_classes)
+        rc_failure_classes = set.union(*[
+            {self.instance_to_class(_) for _ in self.root_cause_instances_of(fid)}
+            for fid in self.failure_ids
+        ])
+        return [self.failure_classes.index(_) for _ in all_failure_classes_set - rc_failure_classes]
 
     def instance_to_class(self, name: str) -> str:
         """
@@ -386,11 +696,11 @@ class FDG:
     def networkx_graph_at(self, fid: int) -> nx.DiGraph:
         return self._nx_failure_graphs[fid]
 
-    @lru_cache
+    @lru_cache(maxsize=None)
     def hetero_graph_at(self, failure_id: int) -> DGLHeteroGraph:
         return self.__get_hg(self._nx_failure_graphs[failure_id])
 
-    @lru_cache
+    @lru_cache(maxsize=None)
     def homo_graph_at(self, failure_id: int) -> dgl.DGLGraph:
         return self.convert_to_homo(self.hetero_graph_at(failure_id))
 
@@ -439,15 +749,36 @@ class FDG:
         """
         return np.sort(self.metrics_df['timestamp'].unique())
 
-    @lru_cache(maxsize=None)
     def failure_timestamps(self, duration=5, granularity=60, before_duration=0) -> np.ndarray:
         start = self.failures_df['timestamp'].unique().reshape(-1, 1)
         expand = (np.arange(-before_duration, duration + 1) * granularity).reshape(1, -1)
-        return np.unique((start + expand).reshape(-1))
+        return np.sort(np.unique((start + expand).reshape(-1)))
 
-    @lru_cache(maxsize=None)
+    def failure_time_windows(
+            self, duration=5, granularity=60, before_duration=0, window_size: int = 10,
+            failure_ids: Optional[Iterable[int]] = None
+    ) -> np.ndarray:
+        """
+        :param failure_ids:
+        :param duration:
+        :param granularity:
+        :param before_duration:
+        :param window_size:
+        :return: A ndarray of timestamps, which is of shape (num_of_windows, window_size)
+        """
+        assert duration + before_duration >= window_size, \
+            f"{duration=} + {before_duration=} should be larger than {window_size=}"
+        ret = []
+        failure_ids = self.failure_ids if failure_ids is None else list(failure_ids)
+        for fault_ts in [self.failure_at(fid)['timestamp'] for fid in failure_ids]:
+            ret.append(sliding_window_view(
+                np.arange(fault_ts - before_duration * granularity, fault_ts + duration * granularity + 1, granularity),
+                window_shape=window_size, axis=-1,
+            ))
+        return np.concatenate(ret, axis=0)
+
     def normal_timestamps(self, granularity=60, duration=10, before_duration=0) -> np.ndarray:
-        return np.asarray(
+        return np.sort(np.asarray(
             list(set(
                 self.valid_timestamps[duration:-duration] if duration > 0 else self.valid_timestamps
             ) - set(
@@ -455,7 +786,27 @@ class FDG:
                     duration=duration, granularity=granularity, before_duration=before_duration
                 )
             ))
-        )
+        ))
+
+    def normal_time_windows(
+            self, granularity=60, duration=10, before_duration=0,
+            window_size: int = 10
+    ) -> np.ndarray:
+        """
+        :param window_size:
+        :param granularity:
+        :param duration:
+        :param before_duration:
+        :return:
+        """
+        timestamps = self.normal_timestamps(granularity=granularity, duration=duration, before_duration=before_duration)
+        split_indices = np.where(np.diff(timestamps) > granularity)[0] + 1
+        ret = []
+        for segments in np.split(timestamps, split_indices, axis=-1):
+            if len(segments) < window_size:
+                continue
+            ret.append(sliding_window_view(segments, window_shape=window_size, axis=-1))
+        return np.concatenate(ret, axis=0)
 
     ###########################
     # Init
@@ -487,11 +838,15 @@ class FDG:
             edge_type = (u_type, f"{u_type}-{data['type']}-{v_type}", v_type)
             hg_data_dict[edge_type][0].append(self._node_to_idx[u_type][u])
             hg_data_dict[edge_type][1].append(self._node_to_idx[v_type][v])
+        num_nodes_dict = {}
+        for node_type, v in self._node_list.items():
+            num_nodes_dict[node_type] = len(v)
         _hg: DGLHeteroGraph = heterograph(
             {
                 key: (th.tensor(src_list).long(), th.tensor(dst_list).long())
                 for key, (src_list, dst_list) in hg_data_dict.items()
-            }
+            },
+            num_nodes_dict=num_nodes_dict
         )
         del hg_data_dict
         return _hg
@@ -501,6 +856,8 @@ class FDG:
         ret = {}
         for node, data in graph.nodes(data=True):
             ret[node] = data['metrics']
+            components = {_.split('##')[0] for _ in ret[node]}
+            assert len(components) == 1, f"There should be only one component for {node=}. {components=}"
         return ret
 
     @staticmethod
@@ -517,7 +874,7 @@ class FDG:
         return ret
 
 
-@lru_cache
+@lru_cache(maxsize=None)
 @profile
 def _get_global_id_getter(hg: DGLHeteroGraph) -> Callable[[str, int], int]:
     ptr = 0
@@ -534,7 +891,7 @@ def _get_global_id_getter(hg: DGLHeteroGraph) -> Callable[[str, int], int]:
     return getter
 
 
-@lru_cache
+@lru_cache(maxsize=None)
 @profile
 def _get_global_id_resolver(hg: DGLHeteroGraph) -> Callable[[int], Tuple[str, int]]:
     id_to_type = {}

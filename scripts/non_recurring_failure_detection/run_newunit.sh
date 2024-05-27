@@ -1,4 +1,4 @@
-cd /SSF
+cd /DejaVu-Omni
 datasets=("A1" "A2" "B" "C" "D")
 for dataset in "${datasets[@]}"
 do

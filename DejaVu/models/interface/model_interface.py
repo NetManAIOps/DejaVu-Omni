@@ -2,12 +2,13 @@ from typing import Any, List, Set, Optional, Callable
 
 import dgl
 import torch as th
+import pandas as pd
 from pyprof import profile
 
 from DejaVu.config import DejaVuConfig
 from DejaVu.dataset import DejaVuDataset
 from DejaVu.evaluation_metrics import top_1_accuracy, top_2_accuracy, top_3_accuracy, top_k_accuracy, MAR
-from DejaVu.models.interface.loss import binary_classification_loss
+from DejaVu.models.interface.loss import binary_classification_loss, cluster_loss, contrastive_loss
 from failure_dependency_graph import FDGModelInterface, FDG
 
 
@@ -28,6 +29,8 @@ class DejaVuModelInterface(FDGModelInterface[DejaVuConfig, DejaVuDataset]):
         self.preds_list: List[List[int]] = []
         self.labels_list: List[Set[int]] = []
         self.probs_list: List[List[float]] = []
+        if config.dataset_split_method == 'recur':
+            self.probs_df: pd.DataFrame = None
 
     @property
     def module(self) -> th.nn.Module:
@@ -56,6 +59,18 @@ class DejaVuModelInterface(FDGModelInterface[DejaVuConfig, DejaVuDataset]):
             drop_edges_fraction=self.config.drop_FDG_edges_fraction,
             device=self.device,
         )
+        self._test_dataset = DejaVuDataset(
+            cdp=self.fdg,
+            feature_extractor=self.metric_preprocessor,
+            fault_ids=self.test_failure_ids,
+            window_size=self.config.window_size,
+            augmentation=False,
+            drop_edges_fraction=self.config.drop_FDG_edges_fraction,
+            device=self.device,
+        )
+    
+    def setup_test(self, stage: Optional[str] = None) -> None:
+        self._train_dataset, self._validation_dataset = None, None
         self._test_dataset = DejaVuDataset(
             cdp=self.fdg,
             feature_extractor=self.metric_preprocessor,
@@ -94,16 +109,31 @@ class DejaVuModelInterface(FDGModelInterface[DejaVuConfig, DejaVuDataset]):
     @profile
     def training_step(self, batch_data, batch_idx):
         features, labels, failure_ids, graphs = batch_data
-        probs: th.Tensor = self.forward(features, graphs)
-        loss: th.Tensor = binary_classification_loss(
-            probs, labels,
-            gamma=0.,
-        )
+        probs: th.Tensor
+        agg_feat: th.Tensor
+        probs, agg_feat = self.forward(features, graphs, True)
+        loss1 = binary_classification_loss(probs, labels, gamma=0.,)
+        if self.config.dataset_split_method == 'recur':
+            w0 = self.config.recur_loss_weight[0]*loss1.detach()
+            w1 = self.config.recur_loss_weight[1]*loss1.detach()
+            if not self.config.recur_score and self.config.recur_loss in ['mhgl', 'contrastive']:
+                loss1 = 0
+                sum_w = self.config.recur_loss_weight[0] + self.config.recur_loss_weight[1]
+                w0, w1 = self.config.recur_loss_weight[0]/sum_w, self.config.recur_loss_weight[1]/sum_w
+            if self.config.recur_loss == 'mhgl':
+                loss2 = cluster_loss(agg_feat, probs, labels, self.fdg, w0, w1)
+            elif self.config.recur_loss == 'contrastive':
+                loss2 = contrastive_loss(agg_feat, labels, self.fdg, w0, self.config.recur_pair_num)
+            else:
+                loss2 = 0
+        else:
+            loss2 = 0
+        loss: th.Tensor = loss1 + loss2
         if hasattr(self.module, "regularization"):
             loss += self.module.regularization() * 1e-2
         if hasattr(self.module.feature_projector, 'rec_loss'):
             rec_loss = self.module.feature_projector.rec_loss
-            loss += th.mean(rec_loss) * self.config.rec_loss_weight
+            loss += th.mean(rec_loss) * self.config.rec_recur_loss_weight
         self.log("loss", loss)
         valid_idx = th.where(th.any(labels, dim=1))[0]
         return {
@@ -129,8 +159,24 @@ class DejaVuModelInterface(FDGModelInterface[DejaVuConfig, DejaVuDataset]):
     @profile
     def validation_step(self, batch, batch_idx):
         features, labels, failure_ids, graphs = batch
-        probs = self.forward(features, graphs)
-        loss = binary_classification_loss(probs, labels, gamma=0.)
+        probs, agg_feat = self.forward(features, graphs, True)
+        loss1 = binary_classification_loss(probs, labels, gamma=0.,)
+        if self.config.dataset_split_method == 'recur':
+            w0 = self.config.recur_loss_weight[0]*loss1.detach()
+            w1 = self.config.recur_loss_weight[1]*loss1.detach()
+            if not self.config.recur_score and self.config.recur_loss in ['mhgl', 'contrastive']:
+                loss1 = 0
+                sum_w = self.config.recur_loss_weight[0] + self.config.recur_loss_weight[1]
+                w0, w1 = self.config.recur_loss_weight[0]/sum_w, self.config.recur_loss_weight[1]/sum_w
+            if self.config.recur_loss == 'mhgl':
+                loss2 = cluster_loss(agg_feat, probs, labels, self.fdg, w0, w1)
+            elif self.config.recur_loss == 'contrastive':
+                loss2 = contrastive_loss(agg_feat, labels, self.fdg, w0, self.config.recur_pair_num)
+            else:
+                loss2 = 0
+        else:
+            loss2 = 0
+        loss: th.Tensor = loss1 + loss2
         self.log("val_loss", loss)
         return {
             "val_loss": loss,
@@ -177,3 +223,47 @@ class DejaVuModelInterface(FDGModelInterface[DejaVuConfig, DejaVuDataset]):
             "MAR": MAR(label_list, pred_list, max_rank=self.fdg.n_failure_instances),
         }
         self.log_dict(metrics)
+
+        if len(self.non_recurring_list) > 0:
+            non_recurring_list = self.non_recurring_list
+            recurring_labels_list, recurring_preds_list = [], []
+            for fault_id, labels, preds in zip(self.test_failure_ids, label_list, pred_list):
+                if fault_id not in non_recurring_list:
+                    recurring_labels_list.append(labels)
+                    recurring_preds_list.append(preds)
+            recur_metrics = {
+                "recur_A@1": top_1_accuracy(recurring_labels_list, recurring_preds_list),
+                "recur_A@2": top_2_accuracy(recurring_labels_list, recurring_preds_list),
+                "recur_A@3": top_3_accuracy(recurring_labels_list, recurring_preds_list),
+                "recur_A@5": top_k_accuracy(recurring_labels_list, recurring_preds_list, k=5),
+                "recur_MAR": MAR(recurring_labels_list, recurring_preds_list, max_rank=self.fdg.n_failure_instances),
+            }
+            self.log_dict(recur_metrics)
+        
+        if len(self.drift_list) > 0:
+            drift_list = self.drift_list
+            drift_labels_list, drift_preds_list = [], []
+            non_drift_labels_list, non_drift_preds_list = [], []
+            for fault_id, labels, preds in zip(self.test_failure_ids, label_list, pred_list):
+                if fault_id in drift_list:
+                    drift_labels_list.append(labels)
+                    drift_preds_list.append(preds)
+                else:
+                    non_drift_labels_list.append(labels)
+                    non_drift_preds_list.append(preds)
+            drift_metrics = {
+                "drift_A@1": top_1_accuracy(drift_labels_list, drift_preds_list),
+                "drift_A@2": top_2_accuracy(drift_labels_list, drift_preds_list),
+                "drift_A@3": top_3_accuracy(drift_labels_list, drift_preds_list),
+                "drift_A@5": top_k_accuracy(drift_labels_list, drift_preds_list, k=5),
+                "drift_MAR": MAR(drift_labels_list, drift_preds_list, max_rank=self.fdg.n_failure_instances),
+            }
+            non_drift_metrics = {
+                "non_drift_A@1": top_1_accuracy(non_drift_labels_list, non_drift_preds_list),
+                "non_drift_A@2": top_2_accuracy(non_drift_labels_list, non_drift_preds_list),
+                "non_drift_A@3": top_3_accuracy(non_drift_labels_list, non_drift_preds_list),
+                "non_drift_A@5": top_k_accuracy(non_drift_labels_list, non_drift_preds_list, k=5),
+                "non_drift_MAR": MAR(non_drift_labels_list, non_drift_preds_list, max_rank=self.fdg.n_failure_instances),
+            }
+            self.log_dict(drift_metrics)
+            self.log_dict(non_drift_metrics)
