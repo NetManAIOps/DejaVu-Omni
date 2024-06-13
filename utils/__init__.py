@@ -6,3 +6,5 @@ from utils.snippets import *
 from utils.wrapped_graph_nn import *
 from utils.load_model import *
 from utils.soft_DTW import SoftDTW
+from utils.numba import *
+from utils.stats import *

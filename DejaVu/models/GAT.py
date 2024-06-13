@@ -71,11 +71,14 @@ class GAT(DejaVuModuleProtocol):
         for GAT_aggregator in self.GAT_aggregators:
             agg_feat = rearrange(GAT_aggregator(batch_graph, agg_feat), "N H F -> N (H F)")
 
-        node_weights = self.predictor(agg_feat)  # (n_total_instances, feature_size)
+        node_weights = self.predictor(agg_feat)  # (n_total_instances)
+        agg_feature_size = agg_feat.shape[-1]
         ret = th.zeros((batch_size, n_instances), dtype=x[0].dtype, device=x[0].device)
         ret[batch_graph.ndata['graph_id'], batch_graph.ndata[dgl.NID]] = node_weights
         if return_feat:
-            feat_ret = th.zeros((batch_size, n_instances, feature_size), dtype=x[0].dtype, device=x[0].device)
+            # print(f"(batch_size, n_instances, agg_feature_size): {batch_size, n_instances, agg_feature_size}")
+            # print(f"agg_feat.shape: {agg_feat.shape}")
+            feat_ret = th.zeros((batch_size, n_instances, agg_feature_size), dtype=x[0].dtype, device=x[0].device)
             feat_ret[batch_graph.ndata['graph_id'], batch_graph.ndata[dgl.NID]] = agg_feat
             return ret, feat_ret
         return ret
