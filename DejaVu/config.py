@@ -8,7 +8,9 @@ from failure_dependency_graph import FDGBaseConfig
 
 class DejaVuConfig(FDGBaseConfig):
     # training parameters
-    early_stopping_epoch_patience: int = 500
+    # early_stopping_epoch_patience: int = 500
+    early_stopping_epoch_patience: int = 100
+    max_epoch: int = 500
 
     checkpoint_metric: Literal['val_loss', "MAR"] = "val_loss"
 

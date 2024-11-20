@@ -76,8 +76,6 @@ class GAT(DejaVuModuleProtocol):
         ret = th.zeros((batch_size, n_instances), dtype=x[0].dtype, device=x[0].device)
         ret[batch_graph.ndata['graph_id'], batch_graph.ndata[dgl.NID]] = node_weights
         if return_feat:
-            # print(f"(batch_size, n_instances, agg_feature_size): {batch_size, n_instances, agg_feature_size}")
-            # print(f"agg_feat.shape: {agg_feat.shape}")
             feat_ret = th.zeros((batch_size, n_instances, agg_feature_size), dtype=x[0].dtype, device=x[0].device)
             feat_ret[batch_graph.ndata['graph_id'], batch_graph.ndata[dgl.NID]] = agg_feat
             return ret, feat_ret
@@ -103,3 +101,37 @@ class GAT(DejaVuModuleProtocol):
         ret = th.zeros((batch_size, n_instances, feature_size), dtype=x[0].dtype, device=x[0].device)
         ret[batch_graph.ndata['graph_id'], batch_graph.ndata[dgl.NID]] = agg_feat
         return ret
+
+    def mask_forward(self, x: List[th.Tensor], graphs: List[dgl.DGLGraph], masks: List[int]):
+        print("[DEBUG] mask_forward")
+        feat = self.feature_projector(x)  # (batch_size, N, feature_size)
+        batch_size, n_instances, feature_size = feat.size()
+
+        # select the features of the instances that are retained in the graphs
+        feat = th.cat([feat[i, g.ndata[dgl.NID]] for i, g in enumerate(graphs)])
+
+        feat = (self.feature_mapper(feat) + feat) / 2
+
+        batch_graph = dgl.batch(graphs)
+        batch_graph.ndata['graph_id'] = dgl.broadcast_nodes(
+            batch_graph, th.arange(len(graphs), device=batch_graph.device)[:, None]
+        )[:, 0]
+
+        agg_feat = feat
+        print(f"[DEBUG] Before: {agg_feat.shape=}")
+        agg_feat = rearrange(agg_feat, "(B N) F -> B N F", B=batch_size, N=n_instances)
+        agg_feat[:,masks,:] = 0
+        print(f"[DEBUG] {agg_feat[0:2,...]=}")
+        agg_feat = rearrange(agg_feat, "B N F -> (B N) F")
+        print(f"[DEBUG] Return: {agg_feat.shape=}")
+        for GAT_aggregator in self.GAT_aggregators:
+            agg_feat = rearrange(GAT_aggregator(batch_graph, agg_feat), "N H F -> N (H F)")
+        agg_feat = rearrange(agg_feat, "(B N) F -> B N F", B=batch_size, N=n_instances)
+        print(f"[DEBUG] Aggregate: {agg_feat[:,masks,:]=}")
+        agg_feat = rearrange(agg_feat, "B N F -> (B N) F")
+        node_weights = self.predictor(agg_feat)  # (n_total_instances)
+        ret = th.zeros((batch_size, n_instances), dtype=x[0].dtype, device=x[0].device)
+        ret[batch_graph.ndata['graph_id'], batch_graph.ndata[dgl.NID]] = node_weights
+        print(f"[DEBUG] Final:\n{ret=}\n{ret[:,masks]=}")
+        return ret
+    

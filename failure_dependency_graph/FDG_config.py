@@ -55,7 +55,7 @@ class FDGBaseConfig(Tap):
     rec_loss_weight: float = 1.
     component_feature_dim: int = 3
     FI_feature_dim: int = 3
-    feature_projector_type: Literal['CNN', 'AE', 'GRU_AE', 'CNN_AE', 'GRU_VAE', 'GRU'] = 'GRU'
+    feature_projector_type: Literal['CNN', 'AE', 'GRU_AE', 'CNN_AE', 'GRU_VAE', 'GRU', 'GRU_Transformer'] = 'GRU'
 
     window_size: Tuple[int, int] = (10, 10)
     batch_size: int = 16

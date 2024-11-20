@@ -203,3 +203,25 @@ class SequentialModelBuilder:
             self.last_shape[:-1] + (out_feats * num_heads,)
         )
         return self
+
+    def add_transformer_encoder(
+            self,
+            num_layers: int,
+            num_heads: int,
+            dropout: float = 0.1,
+    ) -> 'SequentialModelBuilder':
+        transformer_layer = nn.TransformerEncoderLayer(
+            d_model=self.last_shape[-1],  # 假设 feature_dim = channels
+            nhead=num_heads,
+            dim_feedforward=self._output_shape[-1][-1]*4,
+            dropout=dropout,
+            batch_first=True
+        )
+        self._layer_cls.append(nn.TransformerEncoder)
+        self._layer_kwargs.append(dict(
+            encoder_layer=transformer_layer,
+            num_layers=num_layers
+        ))
+        self._layer_args.append([])
+        self._output_shape.append(self.last_shape)
+        return self

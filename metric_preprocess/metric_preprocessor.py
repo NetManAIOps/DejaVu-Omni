@@ -38,25 +38,25 @@ class MetricPreprocessor:
             clip_value=clip_value,
         )
 
-        # from einops import rearrange
-        # self._flatten_features = th.cat(
-        #     [
-        #         rearrange(_, "n m t -> (n m) t")
-        #         for _ in self.features_list
-        #     ]
-        # )
-        # self._flatten_metric_instance_gids = th.cat([
-        #     th.tensor([gid for _ in fdg.FI_metrics_dict[fdg.gid_to_instance(gid)]])
-        #     for gid in range(fdg.n_failure_instances)
-        # ])
-        # self._flatten_metric_names = np.concatenate([
-        #     np.array([_ for _ in fdg.FI_metrics_dict[fdg.gid_to_instance(gid)]])
-        #     for gid in range(fdg.n_failure_instances)
-        # ])
-        # self._flatten_anomaly_direction_constraint = th.tensor([
-        #     {'u': 1, 'd': -1, 'b': 0}[fdg.anomaly_direction_constraint[_.split('##')[-1]]]
-        #     for _ in self._flatten_metric_names
-        # ])
+        from einops import rearrange
+        self._flatten_features = th.cat(
+            [
+                rearrange(_, "n m t -> (n m) t")
+                for _ in self.features_list
+            ]
+        )
+        self._flatten_metric_instance_gids = th.cat([
+            th.tensor([gid for _ in fdg.FI_metrics_dict[fdg.gid_to_instance(gid)]])
+            for gid in range(fdg.n_failure_instances)
+        ])
+        self._flatten_metric_names = np.concatenate([
+            np.array([_ for _ in fdg.FI_metrics_dict[fdg.gid_to_instance(gid)]])
+            for gid in range(fdg.n_failure_instances)
+        ])
+        self._flatten_anomaly_direction_constraint = th.tensor([
+            {'u': 1, 'd': -1, 'b': 0}[fdg.anomaly_direction_constraint[_.split('##')[-1]]]
+            for _ in self._flatten_metric_names
+        ])
 
     def to(self, device: Union[str, th.device]) -> 'MetricPreprocessor':
         self._features_list = move_data_to_device(self._features_list, device)
@@ -70,33 +70,33 @@ class MetricPreprocessor:
         """
         return self._features_list
 
-    # @property
-    # def flatten_features(self) -> th.Tensor:
-    #     """
-    #     :return: A tensor of the shape ((n_failure_classes, n_failure_instances, n_metrics), n_timestamps)
-    #     """
-    #     return self._flatten_features
+    @property
+    def flatten_features(self) -> th.Tensor:
+        """
+        :return: A tensor of the shape ((n_failure_classes, n_failure_instances, n_metrics), n_timestamps)
+        """
+        return self._flatten_features
 
-    # @property
-    # def flatten_metric_instance_gids(self) -> th.Tensor:
-    #     """
-    #     :return: The corresponding instance gids of the flattened features tensor
-    #     """
-    #     return self._flatten_metric_instance_gids
+    @property
+    def flatten_metric_instance_gids(self) -> th.Tensor:
+        """
+        :return: The corresponding instance gids of the flattened features tensor
+        """
+        return self._flatten_metric_instance_gids
 
-    # @property
-    # def flatten_anomaly_direction_constraint(self):
-    #     """
-    #     :return: +1 for up, -1 for down, 0 for both
-    #     """
-    #     return self._flatten_anomaly_direction_constraint
+    @property
+    def flatten_anomaly_direction_constraint(self):
+        """
+        :return: +1 for up, -1 for down, 0 for both
+        """
+        return self._flatten_anomaly_direction_constraint
 
-    # @property
-    # def flatten_metric_names(self) -> np.ndarray:
-    #     """
-    #     :return: The corresponding metric names of the flattened features tensor
-    #     """
-    #     return self._flatten_metric_names
+    @property
+    def flatten_metric_names(self) -> np.ndarray:
+        """
+        :return: The corresponding metric names of the flattened features tensor
+        """
+        return self._flatten_metric_names
 
     def metric_names_to_boolean_indices(self, metric_names: Iterable[str]) -> np.ndarray:
         """

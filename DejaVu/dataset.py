@@ -118,7 +118,8 @@ class DejaVuDataset(th.utils.data.Dataset):
                 median_and_mad = self.__cached_median_and_mad[_mm_cache_key]
             else:
                 median_and_mad = None
-            features = _add_missing_or_spike(features, size=random.randint(1, 5), median_and_mad=median_and_mad)
+            # features = _add_missing_or_spike(features, size=random.randint(1, 5), median_and_mad=median_and_mad)
+            features = _add_perturbation(features, median_and_mad=median_and_mad)
         else:
             features = _add_lag(self.extra_window_size, sum(self._window_size), ori_features, lag=0)
 
@@ -138,6 +139,28 @@ def _add_lag(extra_window_size: int, window_length: int, features: List[th.Tenso
         _[..., left:right]
         for _ in features
     ]
+
+
+@th.jit.script
+def _add_perturbation(
+    features: List[th.Tensor],
+    median_and_mad: Optional[Tuple[List[th.Tensor], List[th.Tensor]]] = None,
+    perturbation_ratio: float = 0.2
+) -> List[th.Tensor]:
+    if median_and_mad is None:
+        return features
+    else:
+        perturbed_features: List[th.Tensor] = []
+        for feature, mad in zip(features, median_and_mad[1]):
+            # 计算扰动强度
+            mad = mad.view(feature.shape[0], feature.shape[1])
+            scale = perturbation_ratio * mad.unsqueeze(-1)  # 依据 `mad` 控制扰动大小
+            noise = scale * th.randn_like(feature)  # 使用 `mad` 生成扰动
+            feature += noise
+            
+            # 将生成的扰动特征添加到列表
+            perturbed_features.append(feature)
+        return perturbed_features
 
 
 @th.jit.script
@@ -184,65 +207,15 @@ def prepare_sklearn_dataset(
         ))
     ts_features_dict = cache.get(ts_feature_key)
     del feature_extractor
-    train_fault_ids, validation_fault_ids, test_fault_ids = split_failures_by_type(
-        cdp.failures_df, fdg=cdp, split=config.dataset_split_ratio, train_set_sampling_ratio=config.train_set_sampling,
-    )
-    train_fault_ids = set(train_fault_ids)
-    validation_fault_ids = set(validation_fault_ids)
-    # test_fault_ids = set(test_fault_ids)
-    rst = {}
-    for node_type in cdp.failure_classes:
-        assert node_type in ts_features_dict, f"{ts_features_dict.keys()=} {cdp.failure_classes=}"
-        ts_feats = ts_features_dict[node_type].replace([np.nan, np.inf, -np.inf], 0)
-        _data = []
-        for i, (index, row) in enumerate(ts_feats.iterrows()):
-            match = re.match(r'fault_id=(?P<id>\d+)\.node=\'(?P<node>.*)\'', index)
-            fault_id = int(match.group('id'))
-            node = match.group('node')
-            rc_node = cdp.failure_at(fault_id)['root_cause_node']
-            _data.append((
-                0 if fault_id in train_fault_ids else (1 if fault_id in validation_fault_ids else 2),
-                row.values,
-                int(rc_node == node),
-                fault_id,
-                node,
-            ))
-        key_func = lambda _: _[0]
-        _data = sorted(_data, key=key_func)
-        _x_list, _y_list, _fault_ids, _node_names = [], [], [], []
-        for _, _parted_data in groupby(_data, key=key_func):
-            _parted_data = list(_parted_data)
-            _x_list.append(np.vstack([_[1] for _ in _parted_data]))
-            _y_list.append(np.array([_[2] for _ in _parted_data]))
-            _fault_ids.append(list([_[3] for _ in _parted_data]))
-            _node_names.append(list([_[4] for _ in _parted_data]))
-        rst[node_type] = (
-            list(ts_feats.columns),
-            (
-                (_x_list[0], _y_list[0], _fault_ids[0], _node_names[0]),
-                (_x_list[1], _y_list[1], _fault_ids[1], _node_names[1]),
-                (_x_list[2], _y_list[2], _fault_ids[2], _node_names[2]),
-            )
+    print(f"[DEBUG] {config.dataset_split_method=}, {config.drift_time=}")
+    if config.dataset_split_method == 'type':
+        train_fault_ids, validation_fault_ids, test_fault_ids = split_failures_by_type(
+            cdp.failures_df, fdg=cdp, split=config.dataset_split_ratio, train_set_sampling_ratio=config.train_set_sampling,
         )
-
-    return rst, (list(train_fault_ids), list(validation_fault_ids), list(test_fault_ids))
-
-
-def prepare_sklearn_dataset_drift(
-        cdp: FDG, config: DejaVuConfig, cache: Cache, mode: str, drift_ts: int
-) -> SKLEARN_DATASET_TYPE:
-    from DejaVu.explanability import prepare_ts_feature_dataset
-    feature_extractor = FDGModelInterface.get_metric_preprocessor(fdg=cdp, config=config, cache=cache)
-    ts_feature_key = f'TS-Feature-{mode=}'
-    if ts_feature_key not in cache or config.flush_dataset_cache:
-        cache.set(ts_feature_key, prepare_ts_feature_dataset(
-            fdg=cdp, fe=feature_extractor, window_size=config.window_size, mode=mode,
-        ))
-    ts_features_dict = cache.get(ts_feature_key)
-    del feature_extractor
-    train_fault_ids, validation_fault_ids, test_fault_ids, drift_list = split_failures_by_drift(
-        cdp.failures_df, fdg=cdp, split=config.dataset_split_ratio, train_set_sampling_ratio=config.train_set_sampling, drift_time=drift_ts
-    )
+    elif config.dataset_split_method == 'drift':
+        train_fault_ids, validation_fault_ids, test_fault_ids, drift_list = split_failures_by_drift(
+            cdp.failures_df, fdg=cdp, split=config.dataset_split_ratio, train_set_sampling_ratio=config.train_set_sampling, drift_time=config.drift_time
+        )
     train_fault_ids = set(train_fault_ids)
     validation_fault_ids = set(validation_fault_ids)
     # test_fault_ids = set(test_fault_ids)

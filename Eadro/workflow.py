@@ -99,7 +99,7 @@ class BaseModel(nn.Module):
 
                 ####### Evaluate test data during training #######
                 if (epoch+1) % evaluation_epoch == 0:
-                    val_results = self.evaluate(val_loader, datatype="Test")
+                    val_results = self.evaluate(val_loader, datatype="Validate")
                     if val_results["A@1"] > best_hr1:
                         best_hr1, eval_res, converge  = val_results["A@1"], val_results, epoch
                         best_state = copy.deepcopy(self.model.state_dict())

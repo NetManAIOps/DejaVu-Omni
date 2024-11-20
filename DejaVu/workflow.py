@@ -170,6 +170,55 @@ def train_exp_CFL(
     print(f"train finished. saved to {config.output_dir}")
 
 
+# @profile(
+#     "train_exp_sklearn_classifier", report_printer=lambda _: logger.info(f"Time Report:\n{_}")
+# )
+# def __train_exp_sklearn_classifier(config: DejaVuConfig, get_model: Callable[[FDG, DejaVuConfig], ClassifierProtocol]):
+#     logger.add(config.output_dir / 'log')
+#     cdp, real_paths = FDG.load(
+#         dir_path=config.data_dir,
+#         graph_path=config.graph_config_path, metrics_path=config.metrics_path, faults_path=config.faults_path,
+#         return_real_path=True
+#     )
+#     dataset_cache_dir = config.cache_dir / ".".join(
+#         f"{k}={real_paths[k]}" for k in sorted(real_paths.keys())
+#     ).replace('/', '_')
+#     logger.info(f"dataset_cache_dir={dataset_cache_dir}")
+#     cache = Cache(str(dataset_cache_dir), size_limit=int(1e10))
+#     del dataset_cache_dir, real_paths
+
+#     dataset, (_, _, test_fault_ids) = prepare_sklearn_dataset(cdp, config, cache, mode=config.ts_feature_mode)
+
+#     y_probs = np.zeros((len(test_fault_ids), cdp.n_failure_instances), dtype=np.float32)
+#     y_trues = []
+#     for fault_id in test_fault_ids:
+#         y_trues.append(set(map(cdp.instance_to_gid, cdp.failures_df.iloc[fault_id]['root_cause_node'].split(';'))))
+#     models = {}
+#     for node_type in cdp.failure_classes:
+#         feature_names, (
+#             (train_x, train_y, _, _), _, (test_x, _, fault_ids, node_names)
+#         ) = dataset[node_type]
+#         model = get_model(cdp, config)
+#         with profile("Training"):
+#             model.fit(train_x, train_y)
+#         models[node_type] = model
+#         with open(config.output_dir / f"{model.__class__}.{node_type=}.pkl", 'wb+') as f:
+#             pickle.dump(model, f)
+#         _y_probs = model.predict_proba(test_x)
+#         for fault_id, node_name, prob in zip(fault_ids, node_names, _y_probs):
+#             with profile("Inference for each failure"):
+#                 y_probs[test_fault_ids.index(fault_id), cdp.instance_to_gid(node_name)] = 1 - prob[0].item()
+#     y_preds = [np.arange(len(prob))[np.argsort(prob, axis=-1)[::-1]].tolist() for prob in y_probs]
+#     metrics = {
+#         "A@1": top_1_accuracy(y_trues, y_preds),
+#         "A@2": top_2_accuracy(y_trues, y_preds),
+#         "A@3": top_3_accuracy(y_trues, y_preds),
+#         "A@5": top_k_accuracy(y_trues, y_preds, k=5),
+#         "MAR": MAR(y_trues, y_preds, max_rank=cdp.n_failure_instances),
+#     }
+#     return metrics
+
+
 @profile(
     "train_exp_sklearn_classifier", report_printer=lambda _: logger.info(f"Time Report:\n{_}")
 )
@@ -198,16 +247,26 @@ def __train_exp_sklearn_classifier(config: DejaVuConfig, get_model: Callable[[FD
         feature_names, (
             (train_x, train_y, _, _), _, (test_x, _, fault_ids, node_names)
         ) = dataset[node_type]
-        model = get_model(cdp, config)
-        with profile("Training"):
-            model.fit(train_x, train_y)
-        models[node_type] = model
-        with open(config.output_dir / f"{model.__class__}.{node_type=}.pkl", 'wb+') as f:
-            pickle.dump(model, f)
-        _y_probs = model.predict_proba(test_x)
+        
+        if len(np.unique(train_y)) > 1:
+            model = get_model(cdp, config)
+            with profile("Training"):
+                model.fit(train_x, train_y)
+            models[node_type] = model
+            with open(config.output_dir / f"{model.__class__}.{node_type=}.pkl", 'wb+') as f:
+                pickle.dump(model, f)
+            _y_probs = model.predict_proba(test_x)
+        else:
+            # 如果只有一个类别，直接将这个类别作为预测结果
+            _y_probs = np.full((len(test_x), 1), 1.0)
+
         for fault_id, node_name, prob in zip(fault_ids, node_names, _y_probs):
             with profile("Inference for each failure"):
-                y_probs[test_fault_ids.index(fault_id), cdp.instance_to_gid(node_name)] = 1 - prob[0].item()
+                if len(np.unique(train_y)) > 1:
+                    y_probs[test_fault_ids.index(fault_id), cdp.instance_to_gid(node_name)] = 1 - prob[0].item()
+                else:
+                    # 直接使用固定类别
+                    y_probs[test_fault_ids.index(fault_id), cdp.instance_to_gid(node_name)] = train_y[0]
     y_preds = [np.arange(len(prob))[np.argsort(prob, axis=-1)[::-1]].tolist() for prob in y_probs]
     metrics = {
         "A@1": top_1_accuracy(y_trues, y_preds),
@@ -247,13 +306,21 @@ def format_result_string(metrics: Dict[str, float], profiler: Profiler, config: 
             f"{config.get_reproducibility_info().get('git_url', '')}"
         )
     elif config.dataset_split_method == 'drift':
+        # return (
+        #     f"command output one-line summary: "
+        #     f"{metrics['A@1'] * 100:.2f},{metrics['A@2'] * 100:.2f},{metrics['A@3'] * 100:.2f},"
+        #     f"{metrics['A@5'] * 100:.2f},{metrics['MAR']:.2f},"
+        #     f"{metrics['drift_A@1'] * 100:.2f},{metrics['drift_A@2'] * 100:.2f},{metrics['drift_A@3'] * 100:.2f},"
+        #     f"{metrics['drift_A@5'] * 100:.2f},{metrics['drift_MAR']:.2f},"
+        #     f"{metrics['non_drift_A@1'] * 100:.2f},{metrics['non_drift_A@2'] * 100:.2f},{metrics['non_drift_A@3'] * 100:.2f},{metrics['non_drift_A@5'] * 100:.2f},{metrics['non_drift_MAR']:.2f},"
+        #     f"{profiler.total},{''},{''},{config.output_dir},{''},{''},{''},"
+        #     f"{config.get_reproducibility_info()['command_line']},"
+        #     f"{config.get_reproducibility_info().get('git_url', '')}"
+        # )
         return (
             f"command output one-line summary: "
             f"{metrics['A@1'] * 100:.2f},{metrics['A@2'] * 100:.2f},{metrics['A@3'] * 100:.2f},"
             f"{metrics['A@5'] * 100:.2f},{metrics['MAR']:.2f},"
-            f"{metrics['drift_A@1'] * 100:.2f},{metrics['drift_A@2'] * 100:.2f},{metrics['drift_A@3'] * 100:.2f},"
-            f"{metrics['drift_A@5'] * 100:.2f},{metrics['drift_MAR']:.2f},"
-            f"{metrics['non_drift_A@1'] * 100:.2f},{metrics['non_drift_A@2'] * 100:.2f},{metrics['non_drift_A@3'] * 100:.2f},{metrics['non_drift_A@5'] * 100:.2f},{metrics['non_drift_MAR']:.2f},"
             f"{profiler.total},{''},{''},{config.output_dir},{''},{''},{''},"
             f"{config.get_reproducibility_info()['command_line']},"
             f"{config.get_reproducibility_info().get('git_url', '')}"

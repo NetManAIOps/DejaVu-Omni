@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+END=${1}
+cmd="${*:2}"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+results_output="${SCRIPT_DIR}/repeats/$(date).repeat.log"
+echo save output to "${results_output}"
+echo cmd=${cmd} | tee -a "${results_output}"
+echo repeat=${END} | tee -a "${results_output}"
+ret_list=()
+cmd_output_list=()
+for i in $(seq 1 $END); do
+  # Set Tmux Pane Title
+  printf '\033]2;%s\033\\' "${i}/${END} -- ${cmd}"
+  cmd_output=/tmp/$(tr -dc A-Za-z0-9 </dev/urandom | head -c 13 ; echo '')
+  cmd_output_list+=("${cmd_output}")
+  ${cmd} 2>&1 | tee ${cmd_output};
+  ret_list+=("$(grep -oP "command output one-line summary: \K(.*)" ${cmd_output})");
+done
+echo "======================================================" | tee -a "${results_output}"
+echo "command outputs:" | tee -a "${results_output}"
+for cmd_output in "${cmd_output_list[@]}"; do
+  echo ${cmd_output} | tee -a "${results_output}";
+done
+echo "results:" | tee -a "${results_output}"
+for ret in "${ret_list[@]}"; do
+  echo ${ret} | tee -a "${results_output}";
+done
+
+temp_output="$(mktemp)"
+awk -F, '{
+    for(i=1; i<=NF; i++) {
+        if ($i ~ /^[+-]?[0-9]+([.][0-9]+)?$/) {  # 检查字段是否为数字
+            sum[i] += $i;
+            count[i]++;
+        }
+    }
+} END {
+    for(i=1; i<=NF; i++) {
+        if (count[i] > 0)  # 确保除数不为零
+            printf "%.2f,", sum[i]/count[i];
+        else
+            printf "N/A,";  # 非数字列的处理
+    }
+    print "";  # 打印换行
+}' "${results_output}" > "${temp_output}"
+cat "${temp_output}" >> "${results_output}"
+rm "${temp_output}"
+# python ${SCRIPT_DIR}/explib/send_mail.py "Experiment Results @ $(hostname): ${cmd}" < "${results_output}"

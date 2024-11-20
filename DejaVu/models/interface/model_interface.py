@@ -133,7 +133,7 @@ class DejaVuModelInterface(FDGModelInterface[DejaVuConfig, DejaVuDataset]):
             loss += self.module.regularization() * 1e-2
         if hasattr(self.module.feature_projector, 'rec_loss'):
             rec_loss = self.module.feature_projector.rec_loss
-            loss += th.mean(rec_loss) * self.config.rec_recur_loss_weight
+            loss += th.mean(rec_loss) * self.config.rec_loss_weight
         self.log("loss", loss)
         valid_idx = th.where(th.any(labels, dim=1))[0]
         return {

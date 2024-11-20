@@ -11,7 +11,9 @@ if __name__ == '__main__':
         config.drift_time = int(f.read())
         print(f"config.drift_time: {config.drift_time}")
     config.dataset_split_method = 'drift'
-    config.dataset_split_ratio = (0.52, 0.2, 0.28)
+    # config.dataset_split_ratio = (0.52, 0.2, 0.28)
+    config.dataset_split_ratio = (0.7, 0.3, 0)
     config.input_clip_val = 20
+    config.flush_dataset_cache = False
     print(f"[DEBUG] config:\n{config}")
     train_exp_CFL(config, get_GAT_model, plot_model=False)

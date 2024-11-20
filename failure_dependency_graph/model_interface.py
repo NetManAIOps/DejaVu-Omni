@@ -236,7 +236,7 @@ def split_failures_by_type(
         fault_df: pd.DataFrame, *, fdg: FDG = None, split: Tuple[float, float, float] = (0.3, 0.2, 0.5),
         train_set_sampling_ratio: float = 1.0, balance_train_set: bool = False
 ) -> Tuple[List[int], List[int], List[int]]:
-    rng = np.random.default_rng(233)  # the random seed should be fixed
+    rng = np.random.default_rng(np.random.randint(0,500))  # the random seed should be fixed
     fault_type_2_id_list = defaultdict(list)
     id_2_root_cause_node = {}
     print(fdg._node_to_class)

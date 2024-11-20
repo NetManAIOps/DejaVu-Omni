@@ -1,0 +1,16 @@
+cmd=python /SSF/DejaVu-Omni/exp/run_GAT_node_classification.py -H=4 -L=8 -fe=GRU -bal=True --data_dir /SSF/DejaVu-Omni/data/D --output_base_path /SSF/DejaVu-Omni/output/fault_localization/D/dejavu_omni/ --dataset_split_ratio 0.4 0.2 0.4 --recur_score True --recur_loss contrative --recur_loss_weight 0.05 0
+repeat=5
+======================================================
+command outputs:
+/tmp/y0S31UhZouWqT
+/tmp/gx2WQ8d2jShyG
+/tmp/ozTNUJUguCN05
+/tmp/i29RMVtEXg2Y6
+/tmp/GrvgK33hEfyhd
+results:
+73.91,84.06,91.30,92.75,5.38,2222.7545240912586,,,/SSF/DejaVu-Omni/output/fault_localization/D/dejavu_omni/run_GAT_node_classification.py.2024-10-08T05:11:02.327583,,,,python /SSF/DejaVu-Omni/exp/run_GAT_node_classification.py -H=4 -L=8 -fe=GRU -bal=True --data_dir /SSF/DejaVu-Omni/data/D --output_base_path /SSF/DejaVu-Omni/output/fault_localization/D/dejavu_omni/ --dataset_split_ratio 0.4 0.2 0.4 --recur_score True --recur_loss contrative --recur_loss_weight 0.05 0,https://github.com/NetManAIOps/DejaVu-Omni/tree/e6bcde103b328c0ba90a21f50f6b1cf715569515
+68.12,85.51,91.30,94.20,2.15,1856.6661951737478,,,/SSF/DejaVu-Omni/output/fault_localization/D/dejavu_omni/run_GAT_node_classification.py.2024-10-08T05:48:17.915170,,,,python /SSF/DejaVu-Omni/exp/run_GAT_node_classification.py -H=4 -L=8 -fe=GRU -bal=True --data_dir /SSF/DejaVu-Omni/data/D --output_base_path /SSF/DejaVu-Omni/output/fault_localization/D/dejavu_omni/ --dataset_split_ratio 0.4 0.2 0.4 --recur_score True --recur_loss contrative --recur_loss_weight 0.05 0,https://github.com/NetManAIOps/DejaVu-Omni/tree/e6bcde103b328c0ba90a21f50f6b1cf715569515
+72.46,84.06,89.86,89.86,3.96,1023.4375150576234,,,/SSF/DejaVu-Omni/output/fault_localization/D/dejavu_omni/run_GAT_node_classification.py.2024-10-08T06:19:29.334668,,,,python /SSF/DejaVu-Omni/exp/run_GAT_node_classification.py -H=4 -L=8 -fe=GRU -bal=True --data_dir /SSF/DejaVu-Omni/data/D --output_base_path /SSF/DejaVu-Omni/output/fault_localization/D/dejavu_omni/ --dataset_split_ratio 0.4 0.2 0.4 --recur_score True --recur_loss contrative --recur_loss_weight 0.05 0,https://github.com/NetManAIOps/DejaVu-Omni/tree/e6bcde103b328c0ba90a21f50f6b1cf715569515
+72.46,78.26,88.41,89.86,23.33,1557.5244900835678,,,/SSF/DejaVu-Omni/output/fault_localization/D/dejavu_omni/run_GAT_node_classification.py.2024-10-08T06:36:48.058078,,,,python /SSF/DejaVu-Omni/exp/run_GAT_node_classification.py -H=4 -L=8 -fe=GRU -bal=True --data_dir /SSF/DejaVu-Omni/data/D --output_base_path /SSF/DejaVu-Omni/output/fault_localization/D/dejavu_omni/ --dataset_split_ratio 0.4 0.2 0.4 --recur_score True --recur_loss contrative --recur_loss_weight 0.05 0,https://github.com/NetManAIOps/DejaVu-Omni/tree/e6bcde103b328c0ba90a21f50f6b1cf715569515
+76.81,86.96,89.86,91.30,6.08,1474.6864733463153,,,/SSF/DejaVu-Omni/output/fault_localization/D/dejavu_omni/run_GAT_node_classification.py.2024-10-08T07:02:57.630206,,,,python /SSF/DejaVu-Omni/exp/run_GAT_node_classification.py -H=4 -L=8 -fe=GRU -bal=True --data_dir /SSF/DejaVu-Omni/data/D --output_base_path /SSF/DejaVu-Omni/output/fault_localization/D/dejavu_omni/ --dataset_split_ratio 0.4 0.2 0.4 --recur_score True --recur_loss contrative --recur_loss_weight 0.05 0,https://github.com/NetManAIOps/DejaVu-Omni/tree/e6bcde103b328c0ba90a21f50f6b1cf715569515
+72.75,83.77,90.15,91.59,8.18,1627.01,N/A,N/A,N/A,N/A,N/A,N/A,N/A,N/A,

@@ -29,7 +29,7 @@ def add_spike_to_tensor(
     t = t.detach().clone()
     ori_size = t.size()
     t = t.view(-1, ori_size[-1])
-    pos = th.randint(1, ori_size[-1], size=(t.size()[0], number), dtype=th.long)
+    pos = th.randint(1, ori_size[-1], size=(t.size()[0], number), dtype=th.long, device=t.device)
     if median is None:
         median = th.median(t, dim=1, keepdim=True).values
     if mad is None:

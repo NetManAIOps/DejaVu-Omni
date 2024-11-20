@@ -15,7 +15,7 @@ from failure_dependency_graph import FDG
 from metric_preprocess import MetricPreprocessor
 from DejaVu.dataset import DejaVuDataset
 from Eadro.config import EadroConfig
-from failure_dependency_graph import FDG, split_failures_by_type
+from failure_dependency_graph import FDG, split_failures_by_type, split_failures_by_drift
 
 
 class GraphModel(nn.Module):
@@ -256,12 +256,20 @@ class EadroModel:
         self.config = config
         self.fdg = cdp
         self.device = device
-        self.train_fault_ids, self.validation_fault_ids, self.test_fault_ids = split_failures_by_type(
-            self.fdg.failures_df, split=config.dataset_split_ratio,
-            train_set_sampling_ratio=config.train_set_sampling,
-            balance_train_set=config.balance_train_set,
-            fdg=self.fdg,
-        )
+        if config.dataset_split_method == 'type':
+            self.train_fault_ids, self.validation_fault_ids, self.test_fault_ids = split_failures_by_type(
+                self.fdg.failures_df, split=config.dataset_split_ratio,
+                train_set_sampling_ratio=config.train_set_sampling,
+                balance_train_set=config.balance_train_set,
+                fdg=self.fdg,
+            )
+        elif config.dataset_split_method == 'drift':
+            self.train_fault_ids, self.validation_fault_ids, self.test_fault_ids, self.drift_list = split_failures_by_drift(
+                self.fdg.failures_df, split=config.dataset_split_ratio,
+                train_set_sampling_ratio=config.train_set_sampling,
+                balance_train_set=config.balance_train_set,
+                fdg=self.fdg, drift_time=config.drift_time,
+            )
         self.train_dataset = DejaVuDataset(
             cdp=self.fdg,
             feature_extractor=mp,

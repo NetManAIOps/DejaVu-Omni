@@ -8,7 +8,7 @@ from pyprof import profile
 from sklearn.neighbors import KDTree
 from tqdm import tqdm
 
-from failure_dependency_graph import FDG, split_failures_by_type
+from failure_dependency_graph import FDG, split_failures_by_type, split_failures_by_drift
 from iSQUAD.anomaly_detection import robust_threshold, t_test
 from iSQUAD.config import ISQUADConfig
 from metric_preprocess import MetricPreprocessor
@@ -18,10 +18,18 @@ class ISQUARD:
     def __init__(self, fdg: FDG, config: ISQUADConfig, mp: MetricPreprocessor):
         self.fdg = fdg
         self.faults_df = self.fdg.failures_df
-        self.train_fault_ids, self.validation_fault_ids, self.test_fault_ids = split_failures_by_type(
-            self.fdg.failures_df, split=config.dataset_split_ratio, train_set_sampling_ratio=config.train_set_sampling,
-            fdg=fdg,
-        )
+        if config.dataset_split_method == 'type':
+            self.train_fault_ids, self.validation_fault_ids, self.test_fault_ids = split_failures_by_type(
+                self.fdg.failures_df, split=config.dataset_split_ratio,
+                train_set_sampling_ratio=config.train_set_sampling,
+                fdg=self.fdg,
+            )
+        elif config.dataset_split_method == 'drift':
+            self.train_fault_ids, self.validation_fault_ids, self.test_fault_ids, self.drift_list = split_failures_by_drift(
+                self.fdg.failures_df, split=config.dataset_split_ratio,
+                train_set_sampling_ratio=config.train_set_sampling,
+                fdg=self.fdg, drift_time=config.drift_time,
+            )
         self._train_len = len(self.train_fault_ids)
         self.config = config
         self.mp = mp
