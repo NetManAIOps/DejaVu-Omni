@@ -1,0 +1,85 @@
+dataset: 'D_drift'
+base_path: '.'
+demo_path: 'data/D_drift'
+label: ''
+
+raw_data:
+  dataset_entry: 'datasets/D_drift'
+  nodes: 'node1 node2 node3 node4 node5 ts-admin-basic-info-service-0 ts-admin-basic-info-service-1 ts-admin-order-service-0 ts-admin-order-service-1 ts-admin-route-service-0 ts-admin-route-service-1 ts-admin-travel-service-0 ts-admin-travel-service-1 ts-admin-user-service ts-admin-user-service-0 ts-admin-user-service-1 ts-assurance-mongo-0 ts-assurance-service ts-assurance-service-0 ts-assurance-service-1 ts-auth-mongo-0 ts-auth-service ts-auth-service-0 ts-auth-service-1 ts-avatar-service-0 ts-avatar-service-1 ts-basic-service ts-basic-service-0 ts-basic-service-1 ts-cancel-service-0 ts-cancel-service-1 ts-config-mongo-0 ts-config-service ts-config-service-0 ts-config-service-1 ts-consign-mongo-0 ts-consign-price-mongo-0 ts-consign-price-service-0 ts-consign-price-service-1 ts-consign-service-0 ts-consign-service-1 ts-contacts-mongo-0 ts-contacts-service ts-contacts-service-0 ts-contacts-service-1 ts-execute-service ts-execute-service-0 ts-execute-service-1 ts-food-map-mongo-0 ts-food-map-service ts-food-map-service-0 ts-food-map-service-1 ts-food-mongo-0 ts-food-service ts-food-service-0 ts-food-service-1 ts-inside-payment-mongo-0 ts-inside-payment-service ts-inside-payment-service-0 ts-inside-payment-service-1 ts-news-service-0 ts-news-service-1 ts-notification-service-0 ts-notification-service-1 ts-order-mongo-0 ts-order-other-mongo-0 ts-order-other-service ts-order-other-service-0 ts-order-other-service-1 ts-order-service ts-order-service-0 ts-order-service-1 ts-payment-mongo-0 ts-payment-service ts-payment-service-0 ts-payment-service-1 ts-preserve-other-service-0 ts-preserve-other-service-1 ts-preserve-service ts-preserve-service-0 ts-preserve-service-1 ts-price-mongo-0 ts-price-service ts-price-service-0 ts-price-service-1 ts-rebook-service-0 ts-rebook-service-1 ts-route-mongo-0 ts-route-plan-service-0 ts-route-plan-service-1 ts-route-service ts-route-service-0 ts-route-service-1 ts-seat-service ts-seat-service-0 ts-seat-service-1 ts-security-mongo-0 ts-security-service ts-security-service-0 ts-security-service-1 ts-station-mongo-0 ts-station-service ts-station-service-0 ts-station-service-1 ts-ticket-office-mongo-0 ts-ticket-office-service-0 ts-ticket-office-service-1 ts-ticketinfo-service ts-ticketinfo-service-0 ts-ticketinfo-service-1 ts-train-mongo-0 ts-train-service ts-train-service-0 ts-train-service-1 ts-travel-mongo-0 ts-travel-plan-service-0 ts-travel-plan-service-1 ts-travel-service ts-travel-service-0 ts-travel-service-1 ts-travel2-mongo-0 ts-travel2-service-0 ts-travel2-service-1 ts-ui-dashboard ts-ui-dashboard-0 ts-user-mongo-0 ts-user-service ts-user-service-0 ts-user-service-1 ts-verification-code-service-0 ts-verification-code-service-1 ts-voucher-mysql-0 ts-voucher-service-0 ts-voucher-service-1'
+  store_dir: 'anomalies'
+  metric_path: 'anomalies/demo_metric.json'
+  log_path: False
+  trace_path: False
+  run_table: 'run_table.csv'
+
+parse:
+  nodes: 'node1 node2 node3 node4 node5 ts-admin-basic-info-service-0 ts-admin-basic-info-service-1 ts-admin-order-service-0 ts-admin-order-service-1 ts-admin-route-service-0 ts-admin-route-service-1 ts-admin-travel-service-0 ts-admin-travel-service-1 ts-admin-user-service ts-admin-user-service-0 ts-admin-user-service-1 ts-assurance-mongo-0 ts-assurance-service ts-assurance-service-0 ts-assurance-service-1 ts-auth-mongo-0 ts-auth-service ts-auth-service-0 ts-auth-service-1 ts-avatar-service-0 ts-avatar-service-1 ts-basic-service ts-basic-service-0 ts-basic-service-1 ts-cancel-service-0 ts-cancel-service-1 ts-config-mongo-0 ts-config-service ts-config-service-0 ts-config-service-1 ts-consign-mongo-0 ts-consign-price-mongo-0 ts-consign-price-service-0 ts-consign-price-service-1 ts-consign-service-0 ts-consign-service-1 ts-contacts-mongo-0 ts-contacts-service ts-contacts-service-0 ts-contacts-service-1 ts-execute-service ts-execute-service-0 ts-execute-service-1 ts-food-map-mongo-0 ts-food-map-service ts-food-map-service-0 ts-food-map-service-1 ts-food-mongo-0 ts-food-service ts-food-service-0 ts-food-service-1 ts-inside-payment-mongo-0 ts-inside-payment-service ts-inside-payment-service-0 ts-inside-payment-service-1 ts-news-service-0 ts-news-service-1 ts-notification-service-0 ts-notification-service-1 ts-order-mongo-0 ts-order-other-mongo-0 ts-order-other-service ts-order-other-service-0 ts-order-other-service-1 ts-order-service ts-order-service-0 ts-order-service-1 ts-payment-mongo-0 ts-payment-service ts-payment-service-0 ts-payment-service-1 ts-preserve-other-service-0 ts-preserve-other-service-1 ts-preserve-service ts-preserve-service-0 ts-preserve-service-1 ts-price-mongo-0 ts-price-service ts-price-service-0 ts-price-service-1 ts-rebook-service-0 ts-rebook-service-1 ts-route-mongo-0 ts-route-plan-service-0 ts-route-plan-service-1 ts-route-service ts-route-service-0 ts-route-service-1 ts-seat-service ts-seat-service-0 ts-seat-service-1 ts-security-mongo-0 ts-security-service ts-security-service-0 ts-security-service-1 ts-station-mongo-0 ts-station-service ts-station-service-0 ts-station-service-1 ts-ticket-office-mongo-0 ts-ticket-office-service-0 ts-ticket-office-service-1 ts-ticketinfo-service ts-ticketinfo-service-0 ts-ticketinfo-service-1 ts-train-mongo-0 ts-train-service ts-train-service-0 ts-train-service-1 ts-travel-mongo-0 ts-travel-plan-service-0 ts-travel-plan-service-1 ts-travel-service ts-travel-service-0 ts-travel-service-1 ts-travel2-mongo-0 ts-travel2-service-0 ts-travel2-service-1 ts-ui-dashboard ts-ui-dashboard-0 ts-user-mongo-0 ts-user-service ts-user-service-0 ts-user-service-1 ts-verification-code-service-0 ts-verification-code-service-1 ts-voucher-mysql-0 ts-voucher-service-0 ts-voucher-service-1'
+  parse_dir: 'parse'
+  metric_path: 'anomalies/demo_metric.json'
+  trace_path: False
+  log_path: False
+  save_path: 'parse/stratification_texts.pkl' 
+
+
+fasttext:
+  train: True
+  supervised: True
+  dataset: 'D_drift'
+  nodes: 'node1 node2 node3 node4 node5 ts-admin-basic-info-service-0 ts-admin-basic-info-service-1 ts-admin-order-service-0 ts-admin-order-service-1 ts-admin-route-service-0 ts-admin-route-service-1 ts-admin-travel-service-0 ts-admin-travel-service-1 ts-admin-user-service ts-admin-user-service-0 ts-admin-user-service-1 ts-assurance-mongo-0 ts-assurance-service ts-assurance-service-0 ts-assurance-service-1 ts-auth-mongo-0 ts-auth-service ts-auth-service-0 ts-auth-service-1 ts-avatar-service-0 ts-avatar-service-1 ts-basic-service ts-basic-service-0 ts-basic-service-1 ts-cancel-service-0 ts-cancel-service-1 ts-config-mongo-0 ts-config-service ts-config-service-0 ts-config-service-1 ts-consign-mongo-0 ts-consign-price-mongo-0 ts-consign-price-service-0 ts-consign-price-service-1 ts-consign-service-0 ts-consign-service-1 ts-contacts-mongo-0 ts-contacts-service ts-contacts-service-0 ts-contacts-service-1 ts-execute-service ts-execute-service-0 ts-execute-service-1 ts-food-map-mongo-0 ts-food-map-service ts-food-map-service-0 ts-food-map-service-1 ts-food-mongo-0 ts-food-service ts-food-service-0 ts-food-service-1 ts-inside-payment-mongo-0 ts-inside-payment-service ts-inside-payment-service-0 ts-inside-payment-service-1 ts-news-service-0 ts-news-service-1 ts-notification-service-0 ts-notification-service-1 ts-order-mongo-0 ts-order-other-mongo-0 ts-order-other-service ts-order-other-service-0 ts-order-other-service-1 ts-order-service ts-order-service-0 ts-order-service-1 ts-payment-mongo-0 ts-payment-service ts-payment-service-0 ts-payment-service-1 ts-preserve-other-service-0 ts-preserve-other-service-1 ts-preserve-service ts-preserve-service-0 ts-preserve-service-1 ts-price-mongo-0 ts-price-service ts-price-service-0 ts-price-service-1 ts-rebook-service-0 ts-rebook-service-1 ts-route-mongo-0 ts-route-plan-service-0 ts-route-plan-service-1 ts-route-service ts-route-service-0 ts-route-service-1 ts-seat-service ts-seat-service-0 ts-seat-service-1 ts-security-mongo-0 ts-security-service ts-security-service-0 ts-security-service-1 ts-station-mongo-0 ts-station-service ts-station-service-0 ts-station-service-1 ts-ticket-office-mongo-0 ts-ticket-office-service-0 ts-ticket-office-service-1 ts-ticketinfo-service ts-ticketinfo-service-0 ts-ticketinfo-service-1 ts-train-mongo-0 ts-train-service ts-train-service-0 ts-train-service-1 ts-travel-mongo-0 ts-travel-plan-service-0 ts-travel-plan-service-1 ts-travel-service ts-travel-service-0 ts-travel-service-1 ts-travel2-mongo-0 ts-travel2-service-0 ts-travel2-service-1 ts-ui-dashboard ts-ui-dashboard-0 ts-user-mongo-0 ts-user-service ts-user-service-0 ts-user-service-1 ts-verification-code-service-0 ts-verification-code-service-1 ts-voucher-mysql-0 ts-voucher-service-0 ts-voucher-service-1'
+  text_path: 'parse/stratification_texts.pkl'
+  fasttext_dir: 'fasttext'
+  temp_dir: 'fasttext/temp'
+  train_path: 'fasttext/temp/train.txt'
+  test_path: 'fasttext/temp/test.txt'
+  train_da_path: 'fasttext/temp/train_da.txt'
+  save_path: 'fasttext/event_embedding.pkl'
+  model_save_path: 'fasttext/model.bin'
+  vector_dim: 100
+  sample_count: 1000
+  edit_count: 1
+  da_method: 'w2v'
+  minCount: 1
+  epoch: 10
+  seed: 2
+
+sentence_embedding:
+  K_S: 134
+  train_path: 'fasttext/temp/train.txt'
+  test_path: 'fasttext/temp/test.txt'
+  source_path: 'fasttext/event_embedding.pkl'
+  save_path: 'sentence_embedding.pkl'
+
+he_dgl:
+  continuousTimes: 2
+  continuousTrain: True
+  train: True
+  nodes: 'node1 node2 node3 node4 node5 ts-admin-basic-info-service-0 ts-admin-basic-info-service-1 ts-admin-order-service-0 ts-admin-order-service-1 ts-admin-route-service-0 ts-admin-route-service-1 ts-admin-travel-service-0 ts-admin-travel-service-1 ts-admin-user-service ts-admin-user-service-0 ts-admin-user-service-1 ts-assurance-mongo-0 ts-assurance-service ts-assurance-service-0 ts-assurance-service-1 ts-auth-mongo-0 ts-auth-service ts-auth-service-0 ts-auth-service-1 ts-avatar-service-0 ts-avatar-service-1 ts-basic-service ts-basic-service-0 ts-basic-service-1 ts-cancel-service-0 ts-cancel-service-1 ts-config-mongo-0 ts-config-service ts-config-service-0 ts-config-service-1 ts-consign-mongo-0 ts-consign-price-mongo-0 ts-consign-price-service-0 ts-consign-price-service-1 ts-consign-service-0 ts-consign-service-1 ts-contacts-mongo-0 ts-contacts-service ts-contacts-service-0 ts-contacts-service-1 ts-execute-service ts-execute-service-0 ts-execute-service-1 ts-food-map-mongo-0 ts-food-map-service ts-food-map-service-0 ts-food-map-service-1 ts-food-mongo-0 ts-food-service ts-food-service-0 ts-food-service-1 ts-inside-payment-mongo-0 ts-inside-payment-service ts-inside-payment-service-0 ts-inside-payment-service-1 ts-news-service-0 ts-news-service-1 ts-notification-service-0 ts-notification-service-1 ts-order-mongo-0 ts-order-other-mongo-0 ts-order-other-service ts-order-other-service-0 ts-order-other-service-1 ts-order-service ts-order-service-0 ts-order-service-1 ts-payment-mongo-0 ts-payment-service ts-payment-service-0 ts-payment-service-1 ts-preserve-other-service-0 ts-preserve-other-service-1 ts-preserve-service ts-preserve-service-0 ts-preserve-service-1 ts-price-mongo-0 ts-price-service ts-price-service-0 ts-price-service-1 ts-rebook-service-0 ts-rebook-service-1 ts-route-mongo-0 ts-route-plan-service-0 ts-route-plan-service-1 ts-route-service ts-route-service-0 ts-route-service-1 ts-seat-service ts-seat-service-0 ts-seat-service-1 ts-security-mongo-0 ts-security-service ts-security-service-0 ts-security-service-1 ts-station-mongo-0 ts-station-service ts-station-service-0 ts-station-service-1 ts-ticket-office-mongo-0 ts-ticket-office-service-0 ts-ticket-office-service-1 ts-ticketinfo-service ts-ticketinfo-service-0 ts-ticketinfo-service-1 ts-train-mongo-0 ts-train-service ts-train-service-0 ts-train-service-1 ts-travel-mongo-0 ts-travel-plan-service-0 ts-travel-plan-service-1 ts-travel-service ts-travel-service-0 ts-travel-service-1 ts-travel2-mongo-0 ts-travel2-service-0 ts-travel2-service-1 ts-ui-dashboard ts-ui-dashboard-0 ts-user-mongo-0 ts-user-service ts-user-service-0 ts-user-service-1 ts-verification-code-service-0 ts-verification-code-service-1 ts-voucher-mysql-0 ts-voucher-service-0 ts-voucher-service-1'
+  service: 'node1 node2 node3 node4 node5 ts-admin-basic-info-service-0 ts-admin-basic-info-service-1 ts-admin-order-service-0 ts-admin-order-service-1 ts-admin-route-service-0 ts-admin-route-service-1 ts-admin-travel-service-0 ts-admin-travel-service-1 ts-admin-user-service ts-admin-user-service-0 ts-admin-user-service-1 ts-assurance-mongo-0 ts-assurance-service ts-assurance-service-0 ts-assurance-service-1 ts-auth-mongo-0 ts-auth-service ts-auth-service-0 ts-auth-service-1 ts-avatar-service-0 ts-avatar-service-1 ts-basic-service ts-basic-service-0 ts-basic-service-1 ts-cancel-service-0 ts-cancel-service-1 ts-config-mongo-0 ts-config-service ts-config-service-0 ts-config-service-1 ts-consign-mongo-0 ts-consign-price-mongo-0 ts-consign-price-service-0 ts-consign-price-service-1 ts-consign-service-0 ts-consign-service-1 ts-contacts-mongo-0 ts-contacts-service ts-contacts-service-0 ts-contacts-service-1 ts-execute-service ts-execute-service-0 ts-execute-service-1 ts-food-map-mongo-0 ts-food-map-service ts-food-map-service-0 ts-food-map-service-1 ts-food-mongo-0 ts-food-service ts-food-service-0 ts-food-service-1 ts-inside-payment-mongo-0 ts-inside-payment-service ts-inside-payment-service-0 ts-inside-payment-service-1 ts-news-service-0 ts-news-service-1 ts-notification-service-0 ts-notification-service-1 ts-order-mongo-0 ts-order-other-mongo-0 ts-order-other-service ts-order-other-service-0 ts-order-other-service-1 ts-order-service ts-order-service-0 ts-order-service-1 ts-payment-mongo-0 ts-payment-service ts-payment-service-0 ts-payment-service-1 ts-preserve-other-service-0 ts-preserve-other-service-1 ts-preserve-service ts-preserve-service-0 ts-preserve-service-1 ts-price-mongo-0 ts-price-service ts-price-service-0 ts-price-service-1 ts-rebook-service-0 ts-rebook-service-1 ts-route-mongo-0 ts-route-plan-service-0 ts-route-plan-service-1 ts-route-service ts-route-service-0 ts-route-service-1 ts-seat-service ts-seat-service-0 ts-seat-service-1 ts-security-mongo-0 ts-security-service ts-security-service-0 ts-security-service-1 ts-station-mongo-0 ts-station-service ts-station-service-0 ts-station-service-1 ts-ticket-office-mongo-0 ts-ticket-office-service-0 ts-ticket-office-service-1 ts-ticketinfo-service ts-ticketinfo-service-0 ts-ticketinfo-service-1 ts-train-mongo-0 ts-train-service ts-train-service-0 ts-train-service-1 ts-travel-mongo-0 ts-travel-plan-service-0 ts-travel-plan-service-1 ts-travel-service ts-travel-service-0 ts-travel-service-1 ts-travel2-mongo-0 ts-travel2-service-0 ts-travel2-service-1 ts-ui-dashboard ts-ui-dashboard-0 ts-user-mongo-0 ts-user-service ts-user-service-0 ts-user-service-1 ts-verification-code-service-0 ts-verification-code-service-1 ts-voucher-mysql-0 ts-voucher-service-0 ts-voucher-service-1'
+  anomaly: '[Node CPU] [Node Memory] [Pod CPU] [Pod Memory] [Pod]'
+  dataset: 'D_drift'
+  heterogeneous: False 
+  data_dir: ''
+  save_dir: 'dgl/stratification_10'
+  Xs: 'sentence_embedding.pkl'
+  run_table: 'run_table.csv' # 'demo_train160.csv'
+  aug: False
+  aug_size: 20
+  # N_S: 11
+  # N_S: 10
+  # N_A: 9
+  # N_A: 5
+  # N_A: 1
+  TOPK_SA: 10
+  save_model: True
+  epoch: 6000 
+  batch_size: 1000
+  win_size: 10
+  win_threshold: 0.0001
+  lr: 0.001
+  # lr: 0.01
+  weight_decay: 0.0001
+  text_path: 'parse/stratification_texts.pkl'
+  tuple_path: 'dgl/tuple.csv'
+  topk_path: 'dgl/topk.csv'
+  anomaly_result_path: 'dgl/a_rt.csv'
+  seed: 2

@@ -1,0 +1,85 @@
+dataset: 'B'
+base_path: '.'
+demo_path: 'data/B'
+label: ''
+
+raw_data:
+  dataset_entry: 'datasets/B'
+  nodes: 'IG01 IG02 MG01 MG02 Mysql01 Mysql02 Redis01 Redis02 Tomcat01 Tomcat02 Tomcat03 Tomcat04 apache01 apache02 dockerA1 dockerA2 dockerB1 dockerB2'
+  store_dir: 'anomalies'
+  metric_path: 'anomalies/demo_metric.json'
+  log_path: False
+  trace_path: False
+  run_table: 'run_table.csv'
+
+parse:
+  nodes: 'IG01 IG02 MG01 MG02 Mysql01 Mysql02 Redis01 Redis02 Tomcat01 Tomcat02 Tomcat03 Tomcat04 apache01 apache02 dockerA1 dockerA2 dockerB1 dockerB2'
+  parse_dir: 'parse'
+  metric_path: 'anomalies/demo_metric.json'
+  trace_path: False
+  log_path: False
+  save_path: 'parse/stratification_texts.pkl' 
+
+
+fasttext:
+  train: True
+  supervised: True
+  dataset: 'B'
+  nodes: 'IG01 IG02 MG01 MG02 Mysql01 Mysql02 Redis01 Redis02 Tomcat01 Tomcat02 Tomcat03 Tomcat04 apache01 apache02 dockerA1 dockerA2 dockerB1 dockerB2'
+  text_path: 'parse/stratification_texts.pkl'
+  fasttext_dir: 'fasttext'
+  temp_dir: 'fasttext/temp'
+  train_path: 'fasttext/temp/train.txt'
+  test_path: 'fasttext/temp/test.txt'
+  train_da_path: 'fasttext/temp/train_da.txt'
+  save_path: 'fasttext/event_embedding.pkl'
+  model_save_path: 'fasttext/model.bin'
+  vector_dim: 100
+  sample_count: 1000
+  edit_count: 1
+  da_method: 'w2v'
+  minCount: 1
+  epoch: 10
+  seed: 2
+
+sentence_embedding:
+  K_S: 18
+  train_path: 'fasttext/temp/train.txt'
+  test_path: 'fasttext/temp/test.txt'
+  source_path: 'fasttext/event_embedding.pkl'
+  save_path: 'sentence_embedding.pkl'
+
+he_dgl:
+  continuousTimes: 2
+  continuousTrain: True
+  train: True
+  nodes: 'IG01 IG02 MG01 MG02 Mysql01 Mysql02 Redis01 Redis02 Tomcat01 Tomcat02 Tomcat03 Tomcat04 apache01 apache02 dockerA1 dockerA2 dockerB1 dockerB2'
+  service: 'IG01 IG02 MG01 MG02 Mysql01 Mysql02 Redis01 Redis02 Tomcat01 Tomcat02 Tomcat03 Tomcat04 apache01 apache02 dockerA1 dockerA2 dockerB1 dockerB2'
+  anomaly: '[JVM CPU;JVM Memory] [JVM CPU] [OS CPU;OS Network] [OS CPU] [OS Disk] [OS Memory] [OS Network]'
+  dataset: 'B'
+  heterogeneous: False 
+  data_dir: ''
+  save_dir: 'dgl/stratification_10'
+  Xs: 'sentence_embedding.pkl'
+  run_table: 'run_table.csv' # 'demo_train160.csv'
+  aug: False
+  aug_size: 20
+  # N_S: 11
+  # N_S: 10
+  # N_A: 9
+  # N_A: 5
+  # N_A: 1
+  TOPK_SA: 10
+  save_model: True
+  epoch: 6000 
+  batch_size: 1000
+  win_size: 10
+  win_threshold: 0.0001
+  lr: 0.001
+  # lr: 0.01
+  weight_decay: 0.0001
+  text_path: 'parse/stratification_texts.pkl'
+  tuple_path: 'dgl/tuple.csv'
+  topk_path: 'dgl/topk.csv'
+  anomaly_result_path: 'dgl/a_rt.csv'
+  seed: 3

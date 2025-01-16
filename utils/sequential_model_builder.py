@@ -11,6 +11,7 @@ from torch import nn as nn
 from utils.conv_shape import conv_1d_output_shape, conv_2d_output_shape
 from utils.layers import Reshape
 from utils.wrapped_graph_nn import WrappedGraphNN
+from utils.tcn import TemporalConvNet
 
 
 class SequentialModelBuilder:

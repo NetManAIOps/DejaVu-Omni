@@ -1,0 +1,91 @@
+dataset: 'gaia'
+base_path: '.'
+demo_path: 'data/gaia/demo'
+label: 'demo_1100'
+
+parse:
+  nodes: 'dbservice1 dbservice2 logservice1 logservice2 mobservice1 mobservice2 redisservice1 redisservice2 webservice1 webservice2'
+  parse_dir: 'parse'
+  metric_path: 'anomalies/demo_metric.json'
+  trace_path: 'anomalies/demo_trace.json' 
+  log_path: 'anomalies/stratification_logs.npy' 
+  save_path: 'parse/stratification_texts.pkl' 
+
+fasttext:
+  train: True
+  supervised: True
+  dataset: 'gaia'
+  nodes: 'dbservice1 dbservice2 logservice1 logservice2 mobservice1 mobservice2 redisservice1 redisservice2 webservice1 webservice2'
+  text_path: 'parse/stratification_texts.pkl'
+  fasttext_dir: 'fasttext'
+  temp_dir: 'fasttext/temp'
+  train_path: 'fasttext/temp/train.txt'
+  test_path: 'fasttext/temp/test.txt'
+  train_da_path: 'fasttext/temp/train_da.txt'
+  save_path: 'fasttext/event_embedding.pkl'
+  model_save_path: 'fasttext/model.bin'
+  vector_dim: 100
+  sample_count: 1000
+  edit_count: 1
+  da_method: 'w2v'
+  minCount: 1
+  epoch: 5
+  seed: 2
+
+sentence_embedding:
+  K_S: 10 
+  train_path: 'fasttext/temp/train.txt'
+  test_path: 'fasttext/temp/test.txt'
+  source_path: 'fasttext/event_embedding.pkl'
+  save_path: 'sentence_embedding.pkl'
+
+he_dgl:
+  continuousTimes: 2
+  continuousTrain: True
+  train: True
+  nodes: 'dbservice1 dbservice2 logservice1 logservice2 mobservice1 mobservice2 redisservice1 redisservice2 webservice1 webservice2'
+  service: 'dbservice logservice mobservice redisservice webservice'
+  anomaly: '[login failure] [memory_anomalies] [file moving program] [normal memory freed label] [access permission denied exception]'
+  dataset: 'gaia'
+  heterogeneous: False # 异质图
+  data_dir: ''
+  save_dir: 'dgl/stratification_10'
+  Xs: 'sentence_embedding.pkl'
+  run_table: 'gaia_resplit.csv' # 'demo_train160.csv'
+  aug: False # 数据增强
+  aug_size: 0
+  # N_S: 5 
+  # N_A: 5
+  TOPK_SA: 10
+  save_model: True
+  epoch: 6000 
+  batch_size: 1000 
+  win_size: 10
+  win_threshold: 0.0001
+  lr: 0.001
+  weight_decay: 0.0001
+  seed: 1
+  text_path: 'parse/stratification_texts.pkl'
+  tuple_path: 'dgl/tuple.csv'
+  topk_path: 'dgl/topk.csv'
+  anomaly_result_path: 'dgl/a_rt.csv'
+
+
+
+source_data_path: 'data/gaia/source_data'
+event_path: 'data/gaia/events'
+feature_path: 'data/gaia/feature'
+result_path: 'result/gaia/analysis'
+exploration_path: 'exploration/gaia/pics'
+trace_path: 'data/gaia/demo/trace'
+log_path: 'data/gaia/demo/log'
+metric_path: 'data/gaia/demo/metric'
+feature_list:
+  0: TFIDF_X
+  1: BOW_X
+  2: NGram_X
+  3: TFIDF_BOW_NGram_X
+  4: TFIDF_BOW_X
+  5: TFIDF_NGram_X,
+  6: BOW_NGram_X
+feature: feature_list[0]

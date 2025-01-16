@@ -21,10 +21,16 @@ def jss20(config: DejaVuConfig):
     graph_library = GraphLibrary(cdp, train_ids[:], mp)
     labels = []
     preds = []
+    # for fid, (_, fault) in zip(test_ids, cdp.failures_df.iloc[test_ids[:]].iterrows()):
+    #     labels.append({fault['root_cause_node']})
+    #     preds.append(graph_library.query(fid))
+    # metrics = get_evaluation_metrics_dict(labels, preds, max_rank=cdp.n_failure_instances)
     for fid, (_, fault) in zip(test_ids, cdp.failures_df.iloc[test_ids[:]].iterrows()):
-        labels.append({fault['root_cause_node']})
-        preds.append(graph_library.query(fid))
-    metrics = get_evaluation_metrics_dict(labels, preds, max_rank=cdp.n_failure_instances)
+        labels.append(set(map(cdp.instance_to_gid, fault["root_cause_node"].split(";"))))
+        pred_str = graph_library.query(fid)
+        pred = [cdp.instance_to_gid(pred_i.split(";")[0]) for pred_i in pred_str]
+        preds.append(pred)
+    metrics = get_evaluation_metrics_dict(labels, preds, cdp)
     logger.info(metrics)
     return metrics
 

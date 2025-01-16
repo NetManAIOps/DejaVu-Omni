@@ -7,6 +7,7 @@ import torch as th
 from pyprof import profile
 from pytorch_lightning.utilities import move_data_to_device
 from tqdm import tqdm
+from multiprocessing import Pool
 
 __all__ = [
     "MetricPreprocessor",

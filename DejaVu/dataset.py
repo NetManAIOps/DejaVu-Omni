@@ -208,6 +208,7 @@ def prepare_sklearn_dataset(
     ts_features_dict = cache.get(ts_feature_key)
     del feature_extractor
     print(f"[DEBUG] {config.dataset_split_method=}, {config.drift_time=}")
+    drift_list = []
     if config.dataset_split_method == 'type':
         train_fault_ids, validation_fault_ids, test_fault_ids = split_failures_by_type(
             cdp.failures_df, fdg=cdp, split=config.dataset_split_ratio, train_set_sampling_ratio=config.train_set_sampling,
@@ -254,4 +255,4 @@ def prepare_sklearn_dataset(
             )
         )
 
-    return rst, (list(train_fault_ids), list(validation_fault_ids), list(test_fault_ids))
+    return rst, (list(train_fault_ids), list(validation_fault_ids), list(test_fault_ids)), drift_list

@@ -1,0 +1,103 @@
+dataset: 'aiops22'
+base_path: '.'
+demo_path: 'data/aiops22/demo'
+label: 'demo_1100'
+
+raw_data:
+  dataset_entry: 'datasets/初赛评分数据'
+  nodes: 'adservice-0 adservice-1 adservice-2 adservice2-0 cartservice-0 cartservice-1 cartservice-2 cartservice2-0 checkoutservice-0 checkoutservice-1 checkoutservice-2 checkoutservice2-0 currencyservice-0 currencyservice-1 currencyservice-2 currencyservice2-0 emailservice-0 emailservice-1 emailservice-2 emailservice2-0 frontend-0 frontend-1 frontend-2 frontend2-0 paymentservice-0 paymentservice-1 paymentservice-2 paymentservice2-0 productcatalogservice-0 productcatalogservice-1 productcatalogservice-2 productcatalogservice2-0 recommendationservice-0 recommendationservice-1 recommendationservice-2 recommendationservice2-0 shippingservice-0 shippingservice-1 shippingservice-2 shippingservice2-0'
+  store_dir: 'anomalies'
+  metric_path: 'anomalies/demo_metric.json'
+  log_path: 'anomalies/stratification_logs.npy'
+  trace_path: 'anomalies/demo_trace.json'
+  run_table: 'run_table.csv'
+
+parse:
+  nodes: 'adservice-0 adservice-1 adservice-2 adservice2-0 cartservice-0 cartservice-1 cartservice-2 cartservice2-0 checkoutservice-0 checkoutservice-1 checkoutservice-2 checkoutservice2-0 currencyservice-0 currencyservice-1 currencyservice-2 currencyservice2-0 emailservice-0 emailservice-1 emailservice-2 emailservice2-0 frontend-0 frontend-1 frontend-2 frontend2-0 paymentservice-0 paymentservice-1 paymentservice-2 paymentservice2-0 productcatalogservice-0 productcatalogservice-1 productcatalogservice-2 productcatalogservice2-0 recommendationservice-0 recommendationservice-1 recommendationservice-2 recommendationservice2-0 shippingservice-0 shippingservice-1 shippingservice-2 shippingservice2-0'
+  parse_dir: 'parse'
+  metric_path: 'anomalies/demo_metric.json'
+  trace_path: 'anomalies/demo_trace.json' 
+  log_path: 'anomalies/stratification_logs.npy' 
+  save_path: 'parse/stratification_texts.pkl' 
+
+
+fasttext:
+  train: True
+  supervised: True
+  dataset: 'aiops22'
+  # nodes: 'adservice-0 adservice-1 adservice-2 adservice2-0 cartservice-0 cartservice-1 cartservice-2 cartservice2-0 checkoutservice-0 checkoutservice-1 checkoutservice-2 checkoutservice2-0 currencyservice-0 currencyservice-1 currencyservice-2 currencyservice2-0 emailservice-0 emailservice-1 emailservice-2 emailservice2-0 frontend-0 frontend-1 frontend-2 frontend2-0 node-1 node-2 node-3 node-4 node-5 node-6 paymentservice-0 paymentservice-1 paymentservice-2 paymentservice2-0 productcatalogservice-0 productcatalogservice-1 productcatalogservice-2 productcatalogservice2-0 recommendationservice-0 recommendationservice-1 recommendationservice-2 recommendationservice2-0 shippingservice-0 shippingservice-1 shippingservice-2 shippingservice2-0'
+  nodes: 'adservice-0 adservice-1 adservice-2 adservice2-0 cartservice-0 cartservice-1 cartservice-2 cartservice2-0 checkoutservice-0 checkoutservice-1 checkoutservice-2 checkoutservice2-0 currencyservice-0 currencyservice-1 currencyservice-2 currencyservice2-0 emailservice-0 emailservice-1 emailservice-2 emailservice2-0 frontend-0 frontend-1 frontend-2 frontend2-0 paymentservice-0 paymentservice-1 paymentservice-2 paymentservice2-0 productcatalogservice-0 productcatalogservice-1 productcatalogservice-2 productcatalogservice2-0 recommendationservice-0 recommendationservice-1 recommendationservice-2 recommendationservice2-0 shippingservice-0 shippingservice-1 shippingservice-2 shippingservice2-0'
+  text_path: 'parse/stratification_texts.pkl'
+  fasttext_dir: 'fasttext'
+  temp_dir: 'fasttext/temp'
+  train_path: 'fasttext/temp/train.txt'
+  test_path: 'fasttext/temp/test.txt'
+  train_da_path: 'fasttext/temp/train_da.txt'
+  save_path: 'fasttext/event_embedding.pkl'
+  model_save_path: 'fasttext/model.bin'
+  vector_dim: 100
+  sample_count: 1000
+  edit_count: 1
+  da_method: 'w2v'
+  minCount: 1
+  epoch: 10
+  seed: 2
+
+sentence_embedding:
+  K_S: 40
+  train_path: 'fasttext/temp/train.txt'
+  test_path: 'fasttext/temp/test.txt'
+  source_path: 'fasttext/event_embedding.pkl'
+  save_path: 'sentence_embedding.pkl'
+
+he_dgl:
+  continuousTimes: 2
+  continuousTrain: True
+  train: True
+  # nodes: 'adservice-0 adservice-1 adservice-2 adservice2-0 cartservice-0 cartservice-1 cartservice-2 cartservice2-0 checkoutservice-0 checkoutservice-1 checkoutservice-2 checkoutservice2-0 currencyservice-0 currencyservice-1 currencyservice-2 currencyservice2-0 emailservice-0 emailservice-1 emailservice-2 emailservice2-0 frontend-0 frontend-1 frontend-2 frontend2-0 node-1 node-2 node-3 node-4 node-5 node-6 paymentservice-0 paymentservice-1 paymentservice-2 paymentservice2-0 productcatalogservice-0 productcatalogservice-1 productcatalogservice-2 productcatalogservice2-0 recommendationservice-0 recommendationservice-1 recommendationservice-2 recommendationservice2-0 shippingservice-0 shippingservice-1 shippingservice-2 shippingservice2-0'
+  nodes: 'adservice-0 adservice-1 adservice-2 adservice2-0 cartservice-0 cartservice-1 cartservice-2 cartservice2-0 checkoutservice-0 checkoutservice-1 checkoutservice-2 checkoutservice2-0 currencyservice-0 currencyservice-1 currencyservice-2 currencyservice2-0 emailservice-0 emailservice-1 emailservice-2 emailservice2-0 frontend-0 frontend-1 frontend-2 frontend2-0 paymentservice-0 paymentservice-1 paymentservice-2 paymentservice2-0 productcatalogservice-0 productcatalogservice-1 productcatalogservice-2 productcatalogservice2-0 recommendationservice-0 recommendationservice-1 recommendationservice-2 recommendationservice2-0 shippingservice-0 shippingservice-1 shippingservice-2 shippingservice2-0'
+  service: 'recommendationservice frontend shippingservice paymentservice currencyservice emailservice checkoutservice cartservice productcatalogservice adservice'
+  anomaly: '[io] [memory] [network] [cpu] [process]'
+  dataset: 'aiops22'
+  heterogeneous: False 
+  data_dir: ''
+  save_dir: 'dgl/stratification_10'
+  Xs: 'sentence_embedding.pkl'
+  run_table: 'run_table.csv' # 'demo_train160.csv'
+  aug: False
+  aug_size: 20
+  # N_S: 10
+  # N_A: 4
+  # N_A: 5
+  TOPK_SA: 10
+  save_model: True
+  epoch: 6000 
+  batch_size: 1000
+  win_size: 10
+  win_threshold: 0.0001
+  lr: 0.001
+  # lr: 0.01
+  weight_decay: 0.0001
+  text_path: 'parse/stratification_texts.pkl'
+  tuple_path: 'dgl/tuple.csv'
+  topk_path: 'dgl/topk.csv'
+  anomaly_result_path: 'dgl/a_rt.csv'
+  seed: 2
+
+# source_data_path: 'data/gaia/source_data'
+# event_path: 'data/gaia/events'
+# feature_path: 'data/gaia/feature'
+# result_path: 'result/gaia/analysis'
+# exploration_path: 'exploration/gaia/pics'
+# trace_path: 'data/gaia/demo/trace'
+# log_path: 'data/gaia/demo/log'
+# metric_path: 'data/gaia/demo/metric'
+# feature_list:
+#   0: TFIDF_X
+#   1: BOW_X
+#   2: NGram_X
+#   3: TFIDF_BOW_NGram_X
+#   4: TFIDF_BOW_X
+#   5: TFIDF_NGram_X,
+#   6: BOW_NGram_X
+# feature: feature_list[0]

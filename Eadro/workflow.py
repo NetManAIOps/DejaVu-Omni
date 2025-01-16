@@ -8,6 +8,8 @@ import numpy as np
 import torch
 from torch import nn
 from pyprof import profile
+from DejaVu.evaluation_metrics import get_evaluation_metrics_dict
+
 
 class BaseModel(nn.Module):
     def __init__(self, model: EadroModel, lr=1e-3, epoches=50, patience=5, result_dir='./', logger=None, device='cuda'):
@@ -22,6 +24,9 @@ class BaseModel(nn.Module):
         self.model_save_dir = result_dir
         model.set_device(device)
         self.model = model.module
+        self.fdg = model.fdg
+        self.drift_list = model.drift_list
+        self.test_failure_ids = model.test_fault_ids
     
     def evaluate(self, test_loader, datatype="Test"):
         self.model.eval()
@@ -31,6 +36,7 @@ class BaseModel(nn.Module):
         batch_cnt, epoch_loss = 0, 0.0 
         
         with torch.no_grad():
+            y_preds, y_trues = [], []
             for features, fault_ids, failure_ids, graphs in test_loader:
                 with profile(f"Inference for a batch of failure with batchsize {fault_ids.shape[0]}"):
                     res = self.model.forward(graphs, features, fault_ids)
@@ -43,6 +49,8 @@ class BaseModel(nn.Module):
                             if faulty_nodes[0] == -1: FN+=1
                             else: 
                                 TP+=1
+                                y_preds.append(faulty_nodes)
+                                y_trues.append({culprit})
                                 rank = list(faulty_nodes).index(culprit)
                                 for j in range(5):
                                     hrs[j] += int(rank <= j)
@@ -59,6 +67,32 @@ class BaseModel(nn.Module):
         for j in [1, 2, 3, 5]:
             eval_results["A@"+str(j)] = hrs[j-1]*1.0/pos
             eval_results["MAR"] = sum(ranks) / len(ranks)
+        
+        if datatype == 'Test':
+            eval_results = get_evaluation_metrics_dict(y_trues, y_preds, self.fdg)
+            if len(self.drift_list) > 0:
+                drift_list = self.drift_list
+                drift_labels_list, drift_preds_list = [], []
+                non_drift_labels_list, non_drift_preds_list = [], []
+                for fault_id, labels, preds in zip(self.test_failure_ids, y_trues, y_preds):
+                    if fault_id in drift_list:
+                        drift_labels_list.append(labels)
+                        drift_preds_list.append(preds)
+                    else:
+                        non_drift_labels_list.append(labels)
+                        non_drift_preds_list.append(preds)
+                drift_metrics = get_evaluation_metrics_dict(drift_labels_list, drift_preds_list, self.fdg, prefix='drift')
+                non_drift_metrics = get_evaluation_metrics_dict(non_drift_labels_list, non_drift_preds_list, self.fdg, prefix='non_drift')
+                eval_results.update(drift_metrics)
+                eval_results.update(non_drift_metrics)
+                RCL_A3_down = (non_drift_metrics['non_drift_RCL_A@3'] - drift_metrics['drift_RCL_A@3']) / non_drift_metrics['non_drift_RCL_A@3']
+                RCL_MAR_up = (drift_metrics['drift_RCL_MAR'] - non_drift_metrics['non_drift_RCL_MAR']) / non_drift_metrics['non_drift_RCL_MAR']
+                FC_F1_down = (non_drift_metrics['non_drift_FC_F1'] - drift_metrics['drift_FC_F1']) / non_drift_metrics['non_drift_FC_F1']
+                eval_results.update({
+                    'RCL_A@3_down': RCL_A3_down,
+                    "RCL_MAR_up": RCL_MAR_up,
+                    "FC_F1_down": FC_F1_down
+                })
             
         self.logger.info("{} -- {}".format(datatype, ", ".join([k+": "+str(f"{v:.4f}") for k, v in eval_results.items()])))
 

@@ -25,7 +25,8 @@ def exp_iSQ(config: ISQUADConfig):
             f"{';'.join(map(cdp.gid_to_instance, y_true)):<30}"
             f"|{', '.join(map(cdp.gid_to_instance, y_pred[:5])):<50}"
         )
-    metrics = get_evaluation_metrics_dict(y_trues, y_preds, max_rank=cdp.n_failure_instances)
+    # metrics = get_evaluation_metrics_dict(y_trues, y_preds, max_rank=cdp.n_failure_instances)
+    metrics = get_evaluation_metrics_dict(y_trues, y_preds, cdp)
     return metrics
 
 

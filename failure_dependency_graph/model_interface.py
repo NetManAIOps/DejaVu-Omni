@@ -42,7 +42,8 @@ class FDGModelInterface(pl.LightningModule, Generic[CONFIG_T, DATASET_T]):
             [
                 f"{k}={real_paths[k]}" for k in sorted(real_paths.keys())
             ] + [
-                f'use_anomaly_direction_constraint={config.use_anomaly_direction_constraint}'
+                f'use_anomaly_direction_constraint={config.use_anomaly_direction_constraint}',
+                f'clip_{config.input_clip_val if config.input_clip_val is not None else "no"}'
             ]
         ).replace("/", "_")
         logger.info(f"dataset_cache_dir={dataset_cache_dir}")
@@ -403,6 +404,8 @@ def split_failures_by_recur(
         balanced_train_ids_list = []
         max_length = max([len(_) for _ in train_ids_list])
         for train_ids in train_ids_list:
+            if len(train_ids) == 0:
+                continue
             oversampling_ratio = max_length // len(train_ids)
             logger.info(f"repeat {train_ids} for {oversampling_ratio} times")
             balanced_train_ids_list.append(train_ids * oversampling_ratio)
@@ -463,7 +466,8 @@ def split_failures_by_drift(
         fault_df: pd.DataFrame, *, fdg: FDG = None, split: Tuple[float, float, float] = (0.8, 0.2, 0.0), drift_time: int,
         train_set_sampling_ratio: float = 1.0, balance_train_set: bool = False
 ) -> Tuple[List[int], List[int], List[int]]:
-    rng = np.random.default_rng(233)  # the random seed should be fixed
+    random_seed = np.random.randint(1,1000)
+    rng = np.random.default_rng(random_seed)  # the random seed should be fixed
     fault_type_2_id_list = defaultdict(list)
     id_2_root_cause_node = {}
     test_list: List[int] = []

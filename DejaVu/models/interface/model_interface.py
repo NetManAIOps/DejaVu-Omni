@@ -7,8 +7,8 @@ from pyprof import profile
 
 from DejaVu.config import DejaVuConfig
 from DejaVu.dataset import DejaVuDataset
-from DejaVu.evaluation_metrics import top_1_accuracy, top_2_accuracy, top_3_accuracy, top_k_accuracy, MAR
-from DejaVu.models.interface.loss import binary_classification_loss, cluster_loss, contrastive_loss
+from DejaVu.evaluation_metrics import top_1_accuracy, top_2_accuracy, top_3_accuracy, top_k_accuracy, MAR, MRR, Precision_Recall_F1, get_evaluation_metrics_dict
+from DejaVu.models.interface.loss import binary_classification_loss, cluster_loss, contrastive_loss, test_classification_loss
 from failure_dependency_graph import FDGModelInterface, FDG
 
 
@@ -112,7 +112,8 @@ class DejaVuModelInterface(FDGModelInterface[DejaVuConfig, DejaVuDataset]):
         probs: th.Tensor
         agg_feat: th.Tensor
         probs, agg_feat = self.forward(features, graphs, True)
-        loss1 = binary_classification_loss(probs, labels, gamma=0.,)
+        # loss1 = binary_classification_loss(probs, labels, gamma=0.,)
+        loss1 = test_classification_loss(probs, labels)
         if self.config.dataset_split_method == 'recur':
             w0 = self.config.recur_loss_weight[0]*loss1.detach()
             w1 = self.config.recur_loss_weight[1]*loss1.detach()
@@ -160,7 +161,8 @@ class DejaVuModelInterface(FDGModelInterface[DejaVuConfig, DejaVuDataset]):
     def validation_step(self, batch, batch_idx):
         features, labels, failure_ids, graphs = batch
         probs, agg_feat = self.forward(features, graphs, True)
-        loss1 = binary_classification_loss(probs, labels, gamma=0.,)
+        # loss1 = binary_classification_loss(probs, labels, gamma=0.,)
+        loss1 = test_classification_loss(probs, labels)
         if self.config.dataset_split_method == 'recur':
             w0 = self.config.recur_loss_weight[0]*loss1.detach()
             w1 = self.config.recur_loss_weight[1]*loss1.detach()
@@ -215,13 +217,7 @@ class DejaVuModelInterface(FDGModelInterface[DejaVuConfig, DejaVuDataset]):
         self.labels_list = label_list
         self.preds_list = pred_list
         self.probs_list = probs.tolist()
-        metrics = {
-            "A@1": top_1_accuracy(label_list, pred_list),
-            "A@2": top_2_accuracy(label_list, pred_list),
-            "A@3": top_3_accuracy(label_list, pred_list),
-            "A@5": top_k_accuracy(label_list, pred_list, k=5),
-            "MAR": MAR(label_list, pred_list, max_rank=self.fdg.n_failure_instances),
-        }
+        metrics = get_evaluation_metrics_dict(label_list, pred_list, self.fdg)
         self.log_dict(metrics)
 
         if len(self.non_recurring_list) > 0:
@@ -251,19 +247,15 @@ class DejaVuModelInterface(FDGModelInterface[DejaVuConfig, DejaVuDataset]):
                 else:
                     non_drift_labels_list.append(labels)
                     non_drift_preds_list.append(preds)
-            drift_metrics = {
-                "drift_A@1": top_1_accuracy(drift_labels_list, drift_preds_list),
-                "drift_A@2": top_2_accuracy(drift_labels_list, drift_preds_list),
-                "drift_A@3": top_3_accuracy(drift_labels_list, drift_preds_list),
-                "drift_A@5": top_k_accuracy(drift_labels_list, drift_preds_list, k=5),
-                "drift_MAR": MAR(drift_labels_list, drift_preds_list, max_rank=self.fdg.n_failure_instances),
-            }
-            non_drift_metrics = {
-                "non_drift_A@1": top_1_accuracy(non_drift_labels_list, non_drift_preds_list),
-                "non_drift_A@2": top_2_accuracy(non_drift_labels_list, non_drift_preds_list),
-                "non_drift_A@3": top_3_accuracy(non_drift_labels_list, non_drift_preds_list),
-                "non_drift_A@5": top_k_accuracy(non_drift_labels_list, non_drift_preds_list, k=5),
-                "non_drift_MAR": MAR(non_drift_labels_list, non_drift_preds_list, max_rank=self.fdg.n_failure_instances),
-            }
+            drift_metrics = get_evaluation_metrics_dict(drift_labels_list, drift_preds_list, self.fdg, prefix='drift')
+            non_drift_metrics = get_evaluation_metrics_dict(non_drift_labels_list, non_drift_preds_list, self.fdg, prefix='non_drift')
             self.log_dict(drift_metrics)
             self.log_dict(non_drift_metrics)
+            RCL_A3_down = (non_drift_metrics['non_drift_RCL_A@3'] - drift_metrics['drift_RCL_A@3']) / non_drift_metrics['non_drift_RCL_A@3']
+            RCL_MAR_up = (drift_metrics['drift_RCL_MAR'] - non_drift_metrics['non_drift_RCL_MAR']) / non_drift_metrics['non_drift_RCL_MAR']
+            FC_F1_down = (non_drift_metrics['non_drift_FC_F1'] - drift_metrics['drift_FC_F1']) / non_drift_metrics['non_drift_FC_F1']
+            self.log_dict({
+                'RCL_A@3_down': RCL_A3_down,
+                "RCL_MAR_up": RCL_MAR_up,
+                "FC_F1_down": FC_F1_down
+            })

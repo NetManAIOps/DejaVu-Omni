@@ -16,4 +16,6 @@ test.py
 pytorchviz/
 batches/
 .virtual_documents/
-scripts_new/
+*.bak/
+results*/
+*.bak.*

@@ -31,10 +31,12 @@ class MLP(DejaVuModuleProtocol):
 
         self.predictor = NodeWeightPredictor(feature_size=feature_size, has_dropout=has_dropout)
 
-    def forward(self, x: List[th.Tensor], graphs: List[dgl.DGLGraph]):
+    def forward(self, x: List[th.Tensor], graphs: List[dgl.DGLGraph], return_feat: bool=False):
         feat = self.feature_projector(x)  # (batch_size, N, feature_size)
-
-        return self.predictor(feat)  # (batch_size, N)
+        ret = self.predictor(feat)
+        if return_feat:
+            return ret, None
+        return ret  # (batch_size, N)
 
 
 class MLPGraphClf(nn.Module):

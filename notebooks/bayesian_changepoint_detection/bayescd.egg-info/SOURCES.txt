@@ -1,0 +1,16 @@
+LICENSE
+README.md
+setup.py
+bayescd.egg-info/PKG-INFO
+bayescd.egg-info/SOURCES.txt
+bayescd.egg-info/dependency_links.txt
+bayescd.egg-info/requires.txt
+bayescd.egg-info/top_level.txt
+bayesian_changepoint_detection/__init__.py
+bayesian_changepoint_detection/bayesian_models.py
+bayesian_changepoint_detection/cy_offline_changepoint_detection.py
+bayesian_changepoint_detection/generate_data.py
+bayesian_changepoint_detection/hazard_functions.py
+bayesian_changepoint_detection/offline_likelihoods.py
+bayesian_changepoint_detection/online_likelihoods.py
+bayesian_changepoint_detection/priors.py

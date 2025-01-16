@@ -1,0 +1,12 @@
+scipy
+numpy
+decorator
+
+[dev]
+pytest
+
+[multivariate]
+scipy>=1.6.0
+
+[plot]
+matplotlib

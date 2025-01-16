@@ -95,6 +95,7 @@ class FDG:
 
         self._faults_df = failures
 
+        logger.info(f"all {self.n_components} components: {self.components}")
         logger.info(f"the number of nodes: {self.n_failure_instances}")
         logger.info(f"all ({len(self.failure_classes)}) node types: {self.failure_classes}")
         logger.info(f"the number of metrics: "
@@ -384,6 +385,21 @@ class FDG:
         """
         return sorted(list({_.split("##")[0] for _ in self.metrics}))
     
+    @property
+    def n_components(self) -> int:
+        """
+        :return: The number of components
+        """
+        return len(self.components)
+    
+    @cached_property
+    def component_to_component_id(self) -> Dict[str, int]:
+        tmp: Dict[str, int] = {
+            component: idx
+            for idx, component in enumerate(self.components)
+        }
+        return tmp
+    
     @cached_property
     def component_fi_index_project_list(self) -> List[int]:
         tmp = []
@@ -611,6 +627,14 @@ class FDG:
     @property
     def failure_classes(self) -> List[str]:
         return self._node_types
+    
+    @property
+    def failure_class_to_id(self) -> Dict[str, int]:
+        tmp: Dict[str, int] = {
+            fc: idx
+            for idx, fc in enumerate(self.failure_classes)
+        }
+        return tmp
 
     @cached_property
     def invalid_failure_class_indices(self) -> List[int]:
@@ -641,6 +665,42 @@ class FDG:
         """
         node_type, node_typed_id = self.gid_to_local_id(gid)
         return self.failure_instances[node_type][node_typed_id]
+
+    def gid_to_component(self, gid: int) -> str:
+        """
+        Map a global id to a component name
+        :param gid: the global id of a component
+        :return: the name of the component
+        """
+        fi = self.gid_to_instance(gid)
+        return self.failure_instance_to_component_dict[fi]
+    
+    def gid_to_failure_class(self, gid: int) -> str:
+        """
+        Map a global id to a failure_class name
+        :param gid: the global id of a failure_class
+        :return: the name of the failure_class
+        """
+        fi = self.gid_to_instance(gid)
+        return self.instance_to_class(fi)
+    
+    def gid_to_fc_id(self, gid: int) -> str:
+        """
+        Map a global id to a failure_class id
+        :param gid: the global id of a failure_class
+        :return: the id of the failure_class
+        """
+        fc = self.gid_to_failure_class(gid)
+        return self.failure_class_to_id[fc]
+    
+    def gid_to_component_id(self, gid: int) -> str:
+        """
+        Map a global id to a component id
+        :param gid: the global id of a component
+        :return: the id of the component
+        """
+        component = self.gid_to_component(gid)
+        return self.component_to_component_id[component]
 
     def instance_to_gid(self, name: str) -> int:
         """

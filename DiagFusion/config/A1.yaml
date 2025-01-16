@@ -1,0 +1,85 @@
+dataset: 'A1'
+base_path: '.'
+demo_path: 'data/A1'
+label: ''
+
+raw_data:
+  dataset_entry: 'datasets/A1'
+  nodes: 'db_003 db_007 db_009 docker_001 docker_002 docker_003 docker_004 docker_005 docker_006 docker_007 docker_008 os_017 os_018 os_019 os_020 os_021 os_022'
+  store_dir: 'anomalies'
+  metric_path: 'anomalies/demo_metric.json'
+  log_path: False
+  trace_path: False
+  run_table: 'run_table.csv'
+
+parse:
+  nodes: 'db_003 db_007 db_009 docker_001 docker_002 docker_003 docker_004 docker_005 docker_006 docker_007 docker_008 os_017 os_018 os_019 os_020 os_021 os_022'
+  parse_dir: 'parse'
+  metric_path: 'anomalies/demo_metric.json'
+  trace_path: False
+  log_path: False
+  save_path: 'parse/stratification_texts.pkl' 
+
+
+fasttext:
+  train: True
+  supervised: True
+  dataset: 'A1'
+  nodes: 'db_003 db_007 db_009 docker_001 docker_002 docker_003 docker_004 docker_005 docker_006 docker_007 docker_008 os_017 os_018 os_019 os_020 os_021 os_022'
+  text_path: 'parse/stratification_texts.pkl'
+  fasttext_dir: 'fasttext'
+  temp_dir: 'fasttext/temp'
+  train_path: 'fasttext/temp/train.txt'
+  test_path: 'fasttext/temp/test.txt'
+  train_da_path: 'fasttext/temp/train_da.txt'
+  save_path: 'fasttext/event_embedding.pkl'
+  model_save_path: 'fasttext/model.bin'
+  vector_dim: 100
+  sample_count: 1000
+  edit_count: 1
+  da_method: 'w2v'
+  minCount: 1
+  epoch: 10
+  seed: 2
+
+sentence_embedding:
+  K_S: 17
+  train_path: 'fasttext/temp/train.txt'
+  test_path: 'fasttext/temp/test.txt'
+  source_path: 'fasttext/event_embedding.pkl'
+  save_path: 'sentence_embedding.pkl'
+
+he_dgl:
+  continuousTimes: 2
+  continuousTrain: True
+  train: True
+  nodes: 'db_003 db_007 db_009 docker_001 docker_002 docker_003 docker_004 docker_005 docker_006 docker_007 docker_008 os_017 os_018 os_019 os_020 os_021 os_022'
+  service: 'db_003 db_007 db_009 docker_001 docker_002 docker_003 docker_004 docker_005 docker_006 docker_007 docker_008 os_017 os_018 os_019 os_020 os_021 os_022'
+  anomaly: '[DB Session] [DB State] [Docker CPU] [Docker] [OS Network]'
+  dataset: 'A1'
+  heterogeneous: False 
+  data_dir: ''
+  save_dir: 'dgl/stratification_10'
+  Xs: 'sentence_embedding.pkl'
+  run_table: 'run_table.csv' # 'demo_train160.csv'
+  aug: False
+  aug_size: 20
+  # N_S: 11
+  # N_S: 10
+  # N_A: 9
+  # N_A: 5
+  # N_A: 1
+  TOPK_SA: 10
+  save_model: True
+  epoch: 6000 
+  batch_size: 1000
+  win_size: 10
+  win_threshold: 0.0001
+  lr: 0.001
+  # lr: 0.01
+  weight_decay: 0.0001
+  text_path: 'parse/stratification_texts.pkl'
+  tuple_path: 'dgl/tuple.csv'
+  topk_path: 'dgl/topk.csv'
+  anomaly_result_path: 'dgl/a_rt.csv'
+  seed: 2

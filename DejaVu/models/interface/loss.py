@@ -188,3 +188,11 @@ def multi_classification_loss(prob: th.Tensor, label: th.Tensor, gamma: float = 
         return focal_loss(prob.view(1, -1), target_id.view(1), gamma=gamma)
     else:
         return focal_loss(prob, target_id, gamma=gamma)
+
+
+
+def test_classification_loss(
+        prob: th.Tensor, label: th.Tensor
+) -> th.Tensor:
+    assert prob.size() == label.size()
+    return func.cross_entropy(prob, label)

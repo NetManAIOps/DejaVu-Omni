@@ -256,6 +256,7 @@ class EadroModel:
         self.config = config
         self.fdg = cdp
         self.device = device
+        self.drift_list = []
         if config.dataset_split_method == 'type':
             self.train_fault_ids, self.validation_fault_ids, self.test_fault_ids = split_failures_by_type(
                 self.fdg.failures_df, split=config.dataset_split_ratio,

@@ -83,7 +83,7 @@ def prepare_ts_feature_dataset(
     for node_type in fdg.failure_classes:
         ts_df = pd.DataFrame.from_records(ts_df_records[node_type])
         feat_df = extract_features(ts_df, column_id='id', column_sort='time', column_kind='kind', column_value='value',
-                                   default_fc_parameters=default_fc_parameters)
+                                   default_fc_parameters=default_fc_parameters, n_jobs=16)
         logger.info(f"{node_type=}, number of metrics: {len(fdg.FC_metrics_dict[node_type])}, features: {feat_df.columns}")
         ret[node_type] = feat_df
     return ret

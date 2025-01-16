@@ -1,0 +1,15 @@
+k8s容器网络延迟,k8s-delay
+node 磁盘写IO消耗,node-write
+k8s容器写io负载,k8s-write
+node 内存消耗,node-memeory
+k8s容器读io负载,k8s-read
+node节点CPU故障,node-cpu-failure
+k8s容器cpu负载,k8s-cpu-load
+node 磁盘读IO消耗,node-read
+node节点CPU爬升,node-cpu-rise
+k8s容器网络资源包重复发送,k8s-duplicate
+k8s容器进程中止,k8s-pod-failure
+k8s容器网络丢包,k8s-loss
+node 磁盘空间消耗,node-consumer
+k8s容器内存负载,k8s-load
+k8s容器网络资源包损坏,k8s-corrupt

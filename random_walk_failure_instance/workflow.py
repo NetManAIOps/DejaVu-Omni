@@ -63,7 +63,15 @@ def workflow(config: RandomWalkFailureInstanceConfig):
             f"{';'.join(y_true):<30}"
             f"|{', '.join(y_pred[:5]):<50}"
         )
-    metrics = get_evaluation_metrics_dict(y_trues, y_preds, max_rank=fdg.n_failure_instances)
+    # metrics = get_evaluation_metrics_dict(y_trues, y_preds, max_rank=fdg.n_failure_instances)
+    # metrics = get_evaluation_metrics_dict(y_trues, y_preds, fdg)
+
+    labels, preds = [], []
+    for y_true, y_pred in zip(y_trues, y_preds):
+        labels.append(set(map(fdg.instance_to_gid, y_true)))
+        pred = [fdg.instance_to_gid(pred_i.split(";")[0]) for pred_i in y_pred]
+        preds.append(pred)
+    metrics = get_evaluation_metrics_dict(labels, preds, fdg)
     logger.info(format_result_string(
         metrics,
         profiler,

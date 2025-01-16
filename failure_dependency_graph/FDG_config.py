@@ -9,7 +9,7 @@ from tap import Tap
 class FDGBaseConfig(Tap):
     # Input
     gradient_clip_val: float = 1.
-    input_clip_val: float = 10.
+    input_clip_val: Optional[float] = None
     es: bool = True
     early_stopping_epoch_patience: int = 250
     weight_decay: float = 1e-2
@@ -25,11 +25,11 @@ class FDGBaseConfig(Tap):
     metrics_path: Optional[Path] = None
     faults_path: Optional[Path] = None
     use_anomaly_direction_constraint: bool = False
-    data_dir: Path = Path("/SSF/data/A2/")
+    data_dir: Path = Path("/SSF/data/A1/")
     cache_dir: Path = Path('/tmp/SSF/.cache')  # 用本地文件系统能加快速度
-    flush_dataset_cache: bool = True
+    flush_dataset_cache: bool = False
 
-    dataset_split_ratio: Tuple[float, float, float] = (0.4, 0.2, 0.4) # (0.39, 0.16, 0.45) for E (concept drift adaption)
+    dataset_split_ratio: Tuple[float, float, float] = (0.4, 0.2, 0.4) # (0.39, 0.16, 0.45) for D (concept drift adaption)
     dataset_split_method: Literal['type', 'recur', 'drift'] = 'type'
     drift_time: int = 0
     non_recur_index_train: int = -1
@@ -43,7 +43,7 @@ class FDGBaseConfig(Tap):
     recur_loss: Literal['contrative', 'mhgl', 'kmeans', 'gmm'] = 'contrative'
     recur_loss_weight: Tuple[float, float] = (0, 0) # (0.05, 0.05)
     recur_pair_num: int = 32
-    output_base_path: Path = Path('/SSF/output_A2/')
+    output_base_path: Path = Path('/SSF/output_A1/')
     output_dir: Path = None
 
     cuda: bool = True
@@ -55,7 +55,7 @@ class FDGBaseConfig(Tap):
     rec_loss_weight: float = 1.
     component_feature_dim: int = 3
     FI_feature_dim: int = 3
-    feature_projector_type: Literal['CNN', 'AE', 'GRU_AE', 'CNN_AE', 'GRU_VAE', 'GRU', 'GRU_Transformer'] = 'GRU'
+    feature_projector_type: Literal['CNN', 'AE', 'GRU_AE', 'CNN_AE', 'GRU_VAE', 'GRU', 'GRU_Transformer', 'TCN'] = 'TCN'
 
     window_size: Tuple[int, int] = (10, 10)
     batch_size: int = 16
