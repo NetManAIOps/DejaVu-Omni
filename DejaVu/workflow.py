@@ -24,7 +24,7 @@ from failure_dependency_graph import FDG, FDGBaseConfig
 from utils import count_parameters, plot_module_with_dot
 from utils.callbacks import EpochTimeCallback
 from utils.load_model import best_checkpoint
-from DejaVu.nonrecur_detect import *
+from DejaVu.unseen_detect import *
 
 
 @profile("train_exp_CFL", report_printer=lambda _: logger.info(f"Time Report:\n{_}"))
@@ -113,7 +113,7 @@ def _train_exp_CFL(
     }
 
 
-def get_recur_df_callback(result: Dict, output_dir: Path, beta=1., recur_score=True, recur_loss='cluster'):
+def get_recur_df_callback(result: Dict, output_dir: Path, beta=1., recur_score=True, recur_loss='contrastive'):
     if recur_score:
         recur_df: pd.DataFrame = result["model"].probs_df
         non_recurring_list = result["model"].non_recurring_list

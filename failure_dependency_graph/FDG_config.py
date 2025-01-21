@@ -40,7 +40,7 @@ class FDGBaseConfig(Tap):
     balance_train_set: bool = False
 
     recur_score: bool = True
-    recur_loss: Literal['contrative', 'mhgl', 'kmeans', 'gmm'] = 'contrative'
+    recur_loss: Literal['contrastive', 'mhgl', 'kmeans', 'gmm'] = 'contrastive'
     recur_loss_weight: Tuple[float, float] = (0, 0) # (0.05, 0.05)
     recur_pair_num: int = 32
     output_base_path: Path = Path('/SSF/output_A1/')

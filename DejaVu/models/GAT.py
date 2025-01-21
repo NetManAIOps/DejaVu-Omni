@@ -98,9 +98,11 @@ class GAT(DejaVuModuleProtocol):
         agg_feat = feat
         for GAT_aggregator in self.GAT_aggregators:
             agg_feat = rearrange(GAT_aggregator(batch_graph, agg_feat), "N H F -> N (H F)")
-        ret = th.zeros((batch_size, n_instances, feature_size), dtype=x[0].dtype, device=x[0].device)
-        ret[batch_graph.ndata['graph_id'], batch_graph.ndata[dgl.NID]] = agg_feat
-        return ret
+
+        agg_feature_size = agg_feat.shape[-1]
+        feat_ret = th.zeros((batch_size, n_instances, agg_feature_size), dtype=x[0].dtype, device=x[0].device)
+        feat_ret[batch_graph.ndata['graph_id'], batch_graph.ndata[dgl.NID]] = agg_feat
+        return feat_ret
 
     def mask_forward(self, x: List[th.Tensor], graphs: List[dgl.DGLGraph], masks: List[int]):
         print("[DEBUG] mask_forward")

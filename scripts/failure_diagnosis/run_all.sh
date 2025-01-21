@@ -10,14 +10,14 @@ do
     # w/o L_c
     python exp/run_GAT_failure_diagnosis.py -H=4 -L=8 -fe=TCN -bal=True --data_dir ${WORKDIR}/data/${dataset}/ --output_base_path ${WORKDIR}/output/ablation_study/failure_diagnosis/${dataset}/wo_Lc/ --dataset_split_ratio 0.4 0.2 0.4 --FI_feature_dim 3  --input_clip_val 10.0 --gpu $GPU
     # w/o GAT
-    python exp/run_direct_failure_diagnosis.py -fe=TCN -bal=True --data_dir ${WORKDIR}/data/${dataset}/ --output_base_path ${WORKDIR}/output/ablation_study/failure_diagnosis/${dataset}/wo_GAT/ --dataset_split_ratio 0.4 0.2 0.4 --FI_feature_dim 3 --input_clip_val 10.0 --recur_score True --recur_loss contrative --recur_loss_weight 0.05 0 --gpu $GPU
+    python exp/run_direct_failure_diagnosis.py -fe=TCN -bal=True --data_dir ${WORKDIR}/data/${dataset}/ --output_base_path ${WORKDIR}/output/ablation_study/failure_diagnosis/${dataset}/wo_GAT/ --dataset_split_ratio 0.4 0.2 0.4 --FI_feature_dim 3 --input_clip_val 10.0 --recur_score True --recur_loss contrastive --recur_loss_weight 0.05 0 --gpu $GPU
     # w/o data augmentation
-    python exp/run_GAT_failure_diagnosis.py -H=4 -L=8 -fe=TCN --data_dir ${WORKDIR}/data/${dataset}/ --output_base_path ${WORKDIR}/output/ablation_study/failure_diagnosis/${dataset}/wo_aug/ --dataset_split_ratio 0.4 0.2 0.4 --FI_feature_dim 3 --input_clip_val 10.0 --recur_score True --recur_loss contrative --recur_loss_weight 0.05 0 --gpu $GPU
+    python exp/run_GAT_failure_diagnosis.py -H=4 -L=8 -fe=TCN --data_dir ${WORKDIR}/data/${dataset}/ --output_base_path ${WORKDIR}/output/ablation_study/failure_diagnosis/${dataset}/wo_aug/ --dataset_split_ratio 0.4 0.2 0.4 --FI_feature_dim 3 --input_clip_val 10.0 --recur_score True --recur_loss contrastive --recur_loss_weight 0.05 0 --gpu $GPU
     # GRU + 1-D CNN
-    python exp/run_GAT_failure_diagnosis.py -H=4 -L=8 -fe=GRU -bal=True --data_dir ${WORKDIR}/data/${dataset}/ --output_base_path ${WORKDIR}/output/ablation_study/failure_diagnosis/${dataset}/GRU/ --dataset_split_ratio 0.4 0.2 0.4 --FI_feature_dim 3 --input_clip_val 10.0 --recur_score True --recur_loss contrative --recur_loss_weight 0.05 0 --gpu $GPU
+    python exp/run_GAT_failure_diagnosis.py -H=4 -L=8 -fe=GRU -bal=True --data_dir ${WORKDIR}/data/${dataset}/ --output_base_path ${WORKDIR}/output/ablation_study/failure_diagnosis/${dataset}/GRU/ --dataset_split_ratio 0.4 0.2 0.4 --FI_feature_dim 3 --input_clip_val 10.0 --recur_score True --recur_loss contrastive --recur_loss_weight 0.05 0 --gpu $GPU
     
     # ours
-    python exp/run_GAT_failure_diagnosis.py -H=4 -L=8 -fe=TCN -bal=True --data_dir ${WORKDIR}/data/${dataset}/ --output_base_path ${WORKDIR}/output/failure_diagnosis/${dataset}/ours/ --dataset_split_ratio 0.4 0.2 0.4 --FI_feature_dim 3  --input_clip_val 10.0 --recur_score True --recur_loss contrative --recur_loss_weight 0.05 0 --gpu $GPU
+    python exp/run_GAT_failure_diagnosis.py -H=4 -L=8 -fe=TCN -bal=True --data_dir ${WORKDIR}/data/${dataset}/ --output_base_path ${WORKDIR}/output/failure_diagnosis/${dataset}/ours/ --dataset_split_ratio 0.4 0.2 0.4 --FI_feature_dim 3  --input_clip_val 10.0 --recur_score True --recur_loss contrastive --recur_loss_weight 0.05 0 --gpu $GPU
     # Eadro
     python exp/DejaVu/run_Eadro.py --data_dir ${WORKDIR}/data/${dataset}/ --output_base_path ${WORKDIR}/output/failure_diagnosis/${dataset}/eadro/ --dataset_split_ratio 0.4 0.2 0.4
     # iSQUAD

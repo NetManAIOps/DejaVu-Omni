@@ -54,26 +54,26 @@ def plot_scatter(clusters, color_pic, plot_rc_types, x_pic, cluster_cs_pic, clus
         x = c[0] + r * np.cos(theta)
         y = c[1] + r * np.sin(theta)
         plt.plot(x, y, color=colors[i-10])
-    markersize = 25
-    for rc_type, color in rc_type_color.items():
-        if rc_type != 'non-recur':
-            indexes_true, indexes_false = [], []
-            for i, temp in enumerate(plot_rc_types):
-                if temp==rc_type:
-                    if color_pic[i] == 1:
-                        indexes_true.append(i)
-                    elif color_pic[i] == 3:
-                        indexes_false.append(i)
-            plt.scatter(x_pic[indexes_true, 0], x_pic[indexes_true, 1], marker='*', color=color, label=rc_type, s=markersize)
-            plt.scatter(x_pic[indexes_false, 0], x_pic[indexes_false, 1], marker='x', color=color, label=rc_type, s=markersize)
-        else:
-            plt.scatter(x_pic[np.where(color_pic==4), 0], x_pic[np.where(color_pic==4), 1], marker='*', color=color, label='non-recurring', s=markersize)
-            plt.scatter(x_pic[np.where(color_pic==5), 0], x_pic[np.where(color_pic==5), 1], marker='x', color=color, label='non-recurring', s=markersize)
-    plt.tick_params(axis='both', which='both', bottom=False, top=False, left=False, right=False, labelbottom=False, labelleft=False)
-    categories = ['true recurring', 'true non-recurring', 'false non-recurring', 'false recurring']
+    # markersize = 25
+    # for rc_type, color in rc_type_color.items():
+    #     if rc_type != 'non-recur':
+    #         indexes_true, indexes_false = [], []
+    #         for i, temp in enumerate(plot_rc_types):
+    #             if temp==rc_type:
+    #                 if color_pic[i] == 1:
+    #                     indexes_true.append(i)
+    #                 elif color_pic[i] == 3:
+    #                     indexes_false.append(i)
+    #         plt.scatter(x_pic[indexes_true, 0], x_pic[indexes_true, 1], marker='*', color=color, label=rc_type, s=markersize)
+    #         plt.scatter(x_pic[indexes_false, 0], x_pic[indexes_false, 1], marker='x', color=color, label=rc_type, s=markersize)
+    #     else:
+    #         plt.scatter(x_pic[np.where(color_pic==4), 0], x_pic[np.where(color_pic==4), 1], marker='*', color=color, label='non-recurring', s=markersize)
+    #         plt.scatter(x_pic[np.where(color_pic==5), 0], x_pic[np.where(color_pic==5), 1], marker='x', color=color, label='non-recurring', s=markersize)
+    # plt.tick_params(axis='both', which='both', bottom=False, top=False, left=False, right=False, labelbottom=False, labelleft=False)
+    # categories = ['true recurring', 'true non-recurring', 'false non-recurring', 'false recurring']
     legend_elements = [mlines.Line2D([], [], color=colors[i], marker='o', linestyle='None', 
                                    markersize=10, label=cluster_list[i]) for i in range(len(cluster_list))]
-    legend_elements.append(mlines.Line2D([], [], color='red', marker='o', linestyle='None', markersize=10, label='non-recurring'))
+    # legend_elements.append(mlines.Line2D([], [], color='red', marker='o', linestyle='None', markersize=10, label='non-recurring'))
     plt.legend(handles=legend_elements, frameon=True, shadow=True, fontsize=11, ncol=len(cluster_list)+1, loc='lower center', bbox_to_anchor=(0.5, 1))
     plt.tight_layout()
     plt.savefig(save_path, dpi=300)
